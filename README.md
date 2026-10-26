@@ -1,6 +1,6 @@
 # Annotation-blind subset selection for large scATAC-seq atlases
 
-A research workflow exploring whether a small subset of cells can retain useful biological information from a large single-cell chromatin-accessibility atlas—**without using cell-type labels to select cells**.
+A workflow for selecting small subsets of large single-cell chromatin-accessibility atlases. **Cell-type labels are used to evaluate the subsets, but do not guide selection.**
 
 The project evaluates Kidney, HECA and Fetal atlases at **2%, 4%, 6%, 8% and 10% sampling budgets**, combining probabilistic representation learning, submodular optimization and downstream biological evaluation.
 
@@ -13,11 +13,11 @@ The project evaluates Kidney, HECA and Fetal atlases at **2%, 4%, 6%, 8% and 10%
 
 Cell-type annotations are used only after selection for evaluation and DA testing. The implementation combines Python, R, disk-backed BPCells matrices, and a Snakemake workflow executed through SLURM.
 
-## Principal finding—and trade-offs
+## Findings and limitations
 
-Selection can enrich some exceptionally rare populations enough to enable DA testing at small budgets. Other rare populations are depleted, uniform random sampling better preserves overall composition and typical-cell latent proximity in the recorded benchmarks, and DA fidelity is not uniformly improved.
+Selection enriches some exceptionally rare populations enough to enable DA testing at small budgets. It also depletes other rare populations. In the recorded benchmarks, uniform random sampling better preserves overall composition and places selected cells closer to typical atlas cells in latent space. DA fidelity varies by dataset and population.
 
-Representation benchmarks include **20 random seeds**; the random DA pilot includes **one seed at 2% and 10%**. These are distinct evidence sets. The manuscript is in preparation; this repository does not claim universal sampling superiority.
+Representation benchmarks include **20 random seeds**. The random DA pilot includes **one seed at 2% and 10%**. The manuscript is in preparation.
 
 ![Rare-population representation, DA eligibility and strict recovery at a 2% budget](publication_figures/main_figures/Figure_1_rare_population_representation_and_DA_fidelity.png)
 
