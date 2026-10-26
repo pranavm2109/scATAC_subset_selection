@@ -1,0 +1,1 @@
+../scripts/validate_figures.py

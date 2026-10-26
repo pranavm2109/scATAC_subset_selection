@@ -1,0 +1,1 @@
+../scripts/check_NN_array_inputs.py

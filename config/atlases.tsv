@@ -1,0 +1,5 @@
+atlas_id	format	species	genome	counts_path	metadata_path	fragments_path	peaks_path	cell_type_column	notes
+atlas1	mtx	human	hg38	data/raw/atlas1/matrix.mtx	data/raw/atlas1/metadata.tsv	data/raw/atlas1/fragments.tsv.gz	data/raw/atlas1/peaks.bed	cell_type	Fill in
+atlas2	rds	human	hg38	data/raw/atlas2/peak_counts.rds	data/raw/atlas2/metadata.tsv			cell_type	Fill in
+atlas3	human_h5ad	human	hg38	data/raw/atlas3/ATAC-all.h5ad	data/raw/atlas3/metadata.tsv			cell_type	Fill in
+atlas4	mtx	human	hg38	data/raw/atlas4/matrix.mtx	data/raw/atlas4/metadata.tsv	data/raw/atlas4/fragments.tsv.gz	data/raw/atlas4/peaks.bed	cell_type	Fill in

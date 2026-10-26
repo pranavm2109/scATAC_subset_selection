@@ -1,0 +1,245 @@
+CURRENT PIPELINE AND PUBLICATION-FIGURE PSEUDOCODE
+Updated 2026-10-22. Source of truth: workflow/Snakefile and the scripts named below.
+Previous pseudocode preserved in docs/pseudocode_before_20261022.txt.
+
+PURPOSE AND SCOPE
+Select small annotation-blind subsets of Kidney, HECA and Fetal scATAC atlases.
+Evaluate population representation, differential accessibility (DA), and observed
+computational cost. The method optimizes landmark-feature diversity; it does not
+explicitly optimize cell-type proportions, nearest-cell distances or DA recovery.
+Annotations are used for evaluation only, not as selection quotas or features.
+
+There are TWO execution layers:
+ A. Core production Snakemake workflow: workflow/Snakefile, target all.
+ B. Manuscript figure rendering from saved production results, historical
+    diagnostics, completed coverage/random benchmarks and Stage A random DA.
+Layer B is not part of Snakemake target all. A fresh core run alone does not
+create the historical diagnostics or completed random benchmark inputs.
+The separate BioRender graphical abstract is author-created artwork.
+
+A. CORE PRODUCTION WORKFLOW
+
+ATLASES := [kidney_atac, heca_atac, fetal_atac]
+BUDGETS := [0.02, 0.04, 0.06, 0.08, 0.10]
+SEED := 123
+
+FOR each atlas:
+  1. Run the atlas-specific preprocessing script.
+     Preserve peak-by-cell counts, existing cell annotations and cell identity.
+     Save data/processed/{atlas}/{atlas}_barebones_seurat.rds.
+     Export counts/metadata and construct the PeakVI input AnnData.
+     Do not use annotations to fit the selection representation.
+
+  2. Train PeakVI on the full atlas (scripts/02_3_run_peakvi.py).
+     Binarize accessibility for the PeakVI input; retain count data for DA.
+     Use 60 Gaussian latent dimensions, batch size 2048, seed 123, GPU.
+     Resolve automatic base epochs using cap 400 and decay-at-n_obs 20000;
+     train for twice that base count. Early stopping is disabled in the rule.
+     Save model, latent.npy, latent TSV, ordered cell names, annotated AnnData,
+     history, convergence plot and run-summary JSON under results/peakvi/.
+
+  3. Build raw RBF landmark features once per atlas
+     (scripts/03_subset_selection_on_peakvi.py, mode build).
+     Z := saved full-atlas 60D PeakVI vectors, in saved cell-name order.
+     C := MiniBatchKMeans(Z, n_clusters=1024, random_state=123,
+                         batch_size=8192, max_iter=100, n_init=3,
+                         max_no_improvement=20, reassignment_ratio=0.01).
+     sigma := median over cells of Euclidean distance to nearest landmark.
+     Validate sigma > 0 and finite.
+     R[i,j] := exp(-||Z[i]-C[j]||^2 / (2*sigma^2)).
+     Compute in chunks; save nonnegative float32 R, centroids, sigma and metadata
+     under results/peakvi_landmark_features/{atlas}/.
+     No minimum shift, annotation weights or density weights in production.
+
+  FOR each budget b independently:
+    4. Validate R, its row masses and alignment with saved cell names.
+       mass[i] := SUM_j R[i,j]; require every mass positive and finite.
+       c := median_i mass[i].
+       X[i,j] := c * R[i,j] / mass[i].
+       Every normalized row has the same total feature mass c.
+       This is L1 normalization to the atlas median mass, not row-sum-one data.
+
+    5. k := max(round(N*b), 1), using the script's Python rounding.
+       selector := Apricot.FeatureBasedSelection(k, 'sqrt',
+                                                random_state=123, verbose=True).
+       Leave optimizer and other unspecified Apricot options at library defaults.
+       Do not add a stochastic optimizer or density/annotation weighting.
+       Fit selector on X; save ordered selected cell IDs and selection summary.
+       Objective: F(S) = SUM_j sqrt(SUM_{i in S} X[i,j]).
+       Each budget is a separate fit, not a prefix of a 10% ranking.
+       Rule stdout/stderr, including verbose progress, goes only to
+       logs/subset_selection/peakvi/{atlas}_{fraction}.log.
+       Snakemake's tracker records job events rather than Apricot progress.
+       Save fit time separately from complete-job wall time/peak CPU RSS.
+
+  6. Evaluate population composition using existing annotations.
+     Count full-atlas and selected cells per annotated type.
+     Compute type fractions and subset/full-atlas proportion enrichment.
+     Save composition tables, alluvial plots and heatmaps.
+     Presence of a type does not imply proportional representation or DA eligibility.
+
+  7. Compute a single saved UMAP per atlas from PeakVI dimensions.
+     Overlay independent selections on those same within-atlas coordinates.
+     Produce type/library-size supporting plots and original 3-atlas x 5-budget
+     UMAP panels. UMAP is descriptive; it is not quantitative 60D coverage.
+     The core target also includes latent feature/cell-type heatmap outputs.
+
+  8. Run production DA (scripts/09_1_run_signac_da_all_cell_types.R).
+     Use the original count/Seurat/BPCells objects, not binarized PeakVI inputs.
+     Run the full atlas first; run each subset as target type versus all its
+     remaining cells, with >=10 target cells and >=20 rest cells.
+     Preserve BPCells marker_features(method='wilcoxon') implementation and its
+     existing group-size/pseudocount effect definition; do not substitute another test.
+     Apply BH correction within cell type across tested matrix peaks.
+     Significant := adjusted P <= 0.05 AND |average log2FC| >= 0.25
+                    AND detection fraction >= 0.01 in either group.
+     Save significant peaks, a status row for every type, and effects at the
+     fixed significant full-atlas reference peaks, even without subset significance.
+     Save open/closed direction from the full-atlas target-versus-rest effect.
+     Never silently treat an ineligible type as an observed null effect.
+
+  9. Measure DA recapitulation (09_2_compute_signac_da_peak_capture.R).
+     Rref := full-atlas significant (cell_type, peak) reference pairs.
+     A := pairs in Rref with available finite subset effect estimates.
+     Pooled Spearman := rank correlation of unmodified signed effects on A.
+     Also retain per-type and direction-specific summaries where supported.
+     Direction agreement := same nonzero signs / |A|.
+     Sign-switch fraction := opposite nonzero signs / |A|.
+     Zero effects contribute to neither sign numerator.
+     Strict recovery := subset significant AND matching reference direction / |Rref|.
+     Keep availability |A|/|Rref| and type eligibility alongside every metric.
+     Effect reproduction does not require subset significance; strict recovery does.
+     Eligibility, sample size, rest-group composition and pseudocount effects can
+     influence comparisons; the metrics do not isolate statistical power alone.
+
+ 10. Make original per-atlas DA plots and original 3x5 publication grids using
+     09_3_plot_signac_da_capture.R and scripts/10_*.py.
+     These core grids under figures/publication/ are source/supporting outputs;
+     the final manuscript Figure 1 and supplementary suite are a separate layer.
+
+B. COMPLETED SUPPORTING ANALYSES (SAVED INPUTS, NOT NEW RUNS)
+
+READ existing historical normalization summaries and identity checks for S1/S9.
+  Historical 2D UMAP distances are within-run comparisons; do not identify them
+  with current 60D coverage or assert unverified cross-run coordinate identity.
+  Kidney/Fetal have historical multibudget normalization summaries; HECA does not.
+
+READ completed benchmarks/full measurements for S4/S6/S6b.
+  3 atlases x 5 budgets x (1 production + 20 random selections) = 315 saved runs.
+  Random seeds 2001-2020; memberships/protocols/hashes preserved in provenance.
+  Matched budgets; selections independent between budgets.
+  Saved coverage uses raw 60D Euclidean coordinates and calibrated approximate
+  neighbor search, with fixed atlas-specific radii and documented accuracy limits.
+  All-query measurements include selected cells at zero; retain nonselected-query
+  summaries separately. Tail accuracy is not guaranteed by sampled validation.
+  Seed bands describe empirical variability, not confidence intervals.
+
+READ completed random_DA_stage_A_2001 results for main Figure 1.
+  Six random DA runs: 3 atlases x budgets 2%/10% x random seed 2001 ONLY.
+  Explicit random membership lists and recorded hashes were validated against
+  Seurat/BPCells objects; separate outputs preserve production analyses.
+  Use unchanged reference definitions and significance thresholds across methods.
+  Retain original-reference and both-methods/two-budget common-eligibility reports.
+  This cohort differs from S3's production-only five-budget common cohort.
+  No additional seed, random sampling, NN search or DA is launched by plotting.
+
+C. FINAL MANUSCRIPT FIGURE RENDERING
+
+ENTRYPOINT: publication_figures/figure_scripts/render_all_publication_figures.sbatch
+Uses existing saved tables and results; it does not call the production workflow.
+
+1. Require the completed saved benchmark and existing figure/source tables.
+2. Validate production type eligibility, fixed-cohort members, count denominators,
+   and the saved historical L1 identities against current selection memberships.
+   Abort on missing/mismatched scientific inputs; do not fabricate replacements.
+3. Render in temporary staging using the existing reviewed plotting functions:
+   S1: normalization retention/composition; clearly historical 2D UMAP distances.
+   S2: population DA eligibility, composition deviation, enriched/depleted examples.
+   S3: direction agreement, strict recovery, pooled correlations, availability,
+       fixed common-eligibility comparison, per-type open/closed correlations.
+       Panel D circles/squares distinguish availability metrics; both solid.
+       E/F dashed = fixed common cohort; solid = original all-reference analyses.
+   S3b: direction-specific strict recovery; same cohort line conventions as S3.
+   S4: measured 60D nearest-selected distance/coverage versus 20 random seeds.
+   S5: Apricot fit time, successful selection-job CPU RSS, separate stage wall times.
+   S6: retained types, TV and JS bits versus matched-budget uniform random sampling.
+   S6b: six selected rare-population count examples across budgets, including losses.
+   S7: existing UMAPs; deterministic display-only cap of 3000 selected/75000 background
+       cells, seed 123; distinguish actual n from shown, preserve independent sets.
+   S8: reuse saved 80x80 DA density bins and unclipped-effect pooled correlations;
+       disclose reference-threshold zero gap and display-only clipping.
+4. Export accepted supplementary names to publication_figures/supplementary_figures/.
+   Preserve reviewed captions; do not replace them with old generated templates.
+   Historical figures/, scripts/, tables/ and scientific benchmark inputs stay intact.
+5. Render final main Figure 1 using plot_figure_1_final.py in a separate process:
+   A: 2% population counts, production versus all 20 random count observations.
+   B: >=10 target/>=20 rest eligibility, with enriched AND depleted populations.
+   C: strict DA recovery using random seed 2001 only; DA-ineligible is display NA,
+      distinct from an eligible measured 0% recovery.
+   Use original annotations: Haematopoietic stem and progenitor cell,
+   Megakaryocytes?, Naive CD4 T cell, Ganglion cells.
+   Output main_figures/Figure_1_rare_population_representation_and_DA_fidelity.*.
+6. Render S9 via plot_s9_overview.py in a separate process:
+   Reuse original four-panel quantitative overview and saved numerical tables.
+   Cover normalization retention, composition TV, DA direction agreement and
+   strict recovery. Do not interpret direction agreement as effect correlation.
+   Output supplementary_figures/S9_quantitative_selection_and_biological_fidelity_overview.*.
+   Retain old MAIN_candidate_quantitative exports as historical material.
+7. Export PDF, SVG and 600-DPI PNG at 178-mm width, with embedded PDF TrueType fonts.
+   Keep Kidney blue / HECA orange / Fetal green where colors encode atlas;
+   S3b open/closed colors instead encode direction, as its legend states.
+   Validate PDF width/fonts, SVG parsing and PNG DPI; render every PDF to a proof.
+   Save figure_tables/final_render_QA.tsv and reports/final_figure_proofs/.
+   Visual review of proof readability/clipping remains an author/QC step.
+8. Keep original figure labels S1-S9 including S3b/S6b; sequential numbering in
+   FIGURE_INDEX.md is a proposal, not an applied renaming of accepted artwork.
+   Keep BioRender as the separate graphical abstract.
+
+Interpretation: selective rare-population enrichment can enable DA in some cases;
+other populations are depleted, random sampling preserves composition/typical-cell
+proximity better in these saved benchmarks, and DA fidelity is not uniformly improved.
+
+EXECUTION (FROM THE PROJECT ROOT; NO COMPUTATION ON LOGIN NODES)
+
+# Core workflow: resume missing/incomplete/outdated targets with four remote jobs.
+# Controller itself is a SLURM compute-node job; rules submit their own CPU/GPU jobs.
+# No --forceall and no automatic --unlock. Keep existing results and figures.
+cd /home/groups/CEDAR/mishrap/scATAC_subset_selection
+sbatch workflow/run_pipeline.sbatch
+
+# Optional compute-node dry run before the real submission:
+# sbatch workflow/run_pipeline.sbatch --dry-run
+
+# After core completion, render ALL final manuscript figures from saved inputs:
+sbatch publication_figures/figure_scripts/render_all_publication_figures.sbatch
+
+# To queue plotting only after successful core completion, instead use:
+pipeline_job_id=$(sbatch --parsable workflow/run_pipeline.sbatch)
+sbatch --dependency=afterok:${pipeline_job_id%%;*} publication_figures/figure_scripts/render_all_publication_figures.sbatch
+
+The two submission examples are alternatives; do not submit both pipeline examples.
+Controller logs: logs/pipeline_controller_<jobid>.log.
+Rule/selection logs: logs/ and .snakemake/slurm_logs/ as defined by Snakefile.
+All-figure log: publication_figures/logs/all_publication_figures_<jobid>.log.
+The existing render_final_figures.sbatch remains an option for Figure 1 + S9 ONLY.
+Do not use historical REGENERATE.md benchmark-launch instructions for figure rendering.
+If selections/definitions change, old diagnostic/benchmark tables may be incompatible:
+validation should stop, and new supporting analyses require a separate decision.
+
+============================================================
+COMMANDS TO RUN (IN ORDER)
+============================================================
+
+1. Run/resume the Snakemake pipeline:
+
+cd /home/groups/CEDAR/mishrap/scATAC_subset_selection
+sbatch workflow/run_pipeline.sbatch
+
+2. AFTER the pipeline finishes successfully, generate all publication-quality
+   figures (main Figure 1 and S1-S9, including S3b and S6b):
+
+cd /home/groups/CEDAR/mishrap/scATAC_subset_selection
+sbatch publication_figures/figure_scripts/render_all_publication_figures.sbatch
+
+Both commands submit compute-node jobs. Do not run the Python plotting scripts
+on the login node. No new benchmark experiments are launched by figure rendering.

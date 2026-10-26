@@ -1,0 +1,1 @@
+../scripts/plot_random_benchmark_when_available.py

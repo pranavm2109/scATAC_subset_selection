@@ -1,0 +1,1 @@
+../scripts/validate_publication_inputs.py

@@ -1,0 +1,1 @@
+../scripts/regenerate_publication.py

@@ -1,0 +1,1 @@
+../compare_stage_A.sbatch

@@ -1,0 +1,1 @@
+../scripts/audit_cached_diagnostics.py

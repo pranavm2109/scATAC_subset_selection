@@ -1,0 +1,3589 @@
+from pathlib import Path
+
+shell.executable("/bin/bash")
+
+# ---------------------------------
+# Global settings
+# ---------------------------------
+
+ATLASES = [
+    "kidney_atac",
+    "heca_atac",
+    "fetal_atac",
+]
+
+FRACTIONS = {
+    "02pct": "0.02",
+    "04pct": "0.04",
+    "06pct": "0.06",
+    "08pct": "0.08",
+    "10pct": "0.10",
+}
+
+# Temporary diagnostics below document the completed 2-10% experiments.
+LEGACY_DIAGNOSTIC_FRACTIONS = {
+    "02pct": "0.02",
+    "04pct": "0.04",
+    "06pct": "0.06",
+    "08pct": "0.08",
+    "10pct": "0.10",
+}
+
+DENSITY_GENERALIZATION_ATLASES = ["fetal_atac", "kidney_atac"]
+
+
+def density_generalization_selected_path(atlas, frac):
+    if atlas == "fetal_atac" and frac == "02pct":
+        return (
+            "diagnostics/density_weighted_ablation/fetal_atac/02pct/"
+            "selected_cells_density_max_2p0_02pct.txt"
+        )
+    return (
+        f"diagnostics/density_weighted_generalization/selections/{atlas}/{frac}/"
+        f"selected_cells_density_max_2p0_{frac}.txt"
+    )
+
+
+DENSITY_GENERALIZATION_SELECTED = [
+    density_generalization_selected_path(atlas, frac)
+    for atlas in DENSITY_GENERALIZATION_ATLASES
+    for frac in LEGACY_DIAGNOSTIC_FRACTIONS.keys()
+]
+
+KIDNEY_DENSITY_CAPS = {
+    "1p5": "1.5",
+    "1p6": "1.6",
+    "1p7": "1.7",
+    "1p8": "1.8",
+    "1p9": "1.9",
+}
+KIDNEY_DENSITY_ALL_CAPS = [*KIDNEY_DENSITY_CAPS.keys(), "2p0"]
+
+
+def kidney_density_cap_selected_path(cap, frac):
+    if cap == "2p0":
+        return (
+            "diagnostics/density_weighted_generalization/selections/"
+            f"kidney_atac/{frac}/selected_cells_density_max_2p0_{frac}.txt"
+        )
+    return (
+        "diagnostics/kidney_density_cap_ablation/selections/"
+        f"{cap}/{frac}/selected_cells_density_max_{cap}_{frac}.txt"
+    )
+
+
+KIDNEY_DENSITY_CAP_SELECTED = [
+    kidney_density_cap_selected_path(cap, frac)
+    for cap in KIDNEY_DENSITY_ALL_CAPS
+    for frac in LEGACY_DIAGNOSTIC_FRACTIONS.keys()
+]
+
+HYBRID_RBF_DENSITY_ATLASES = ["kidney_atac", "fetal_atac"]
+HYBRID_RBF_DENSITY_SELECTED = [
+    (
+        "diagnostics/hybrid_rbf_density_ablation/selections/"
+        f"{atlas}/{frac}/selected_cells_hybrid_{frac}.txt"
+    )
+    for atlas in HYBRID_RBF_DENSITY_ATLASES
+    for frac in LEGACY_DIAGNOSTIC_FRACTIONS.keys()
+]
+
+SIGNAC_DA_DATASET_SIZES = list(FRACTIONS.keys()) + ["100pct"]
+SIGNAC_DA_RUN_ORDER = ["100pct"] + list(FRACTIONS.keys())
+
+COVERAGE_LOG_TRANSFORMS = {
+    "log": "true",
+    "linear": "false",
+}
+
+PEAKVI_N_LATENT = 60
+PEAKVI_LATENT_DISTRIBUTION = "normal"
+PEAKVI_MAX_EPOCHS = "auto"
+PEAKVI_EPOCH_MULTIPLIER = 2
+PEAKVI_BATCH_SIZE = 2048
+PEAKVI_RANDOM_SEED = 123
+PEAKVI_EARLY_STOPPING_PATIENCE = 10
+PEAKVI_DATALOADER_WORKERS = 0
+PEAKVI_EPOCHS_CAP = 400
+PEAKVI_DECAY_AT_N_OBS = 20000
+
+PEAKVI_LANDMARK_N = 1024
+PEAKVI_LANDMARK_RANDOM_SEED = 123
+PEAKVI_LANDMARK_KMEANS_BATCH_SIZE = 8192
+PEAKVI_LANDMARK_KMEANS_MAX_ITER = 100
+PEAKVI_LANDMARK_KMEANS_N_INIT = 3
+PEAKVI_LANDMARK_KMEANS_MAX_NO_IMPROVEMENT = 20
+PEAKVI_LANDMARK_KMEANS_REASSIGNMENT_RATIO = 0.01
+PEAKVI_LANDMARK_DISTANCE_CHUNK_SIZE = 50000
+PEAKVI_DENSITY_KNN_K = 30
+PEAKVI_DENSITY_MAX_WEIGHT = 2.0
+COMMON_DENSITY_CAP_05PCT_WEIGHTS = "1.25,1.4,1.5,1.6,1.7,1.8,1.9,2.0"
+MINIMUM_LANDMARK_DIAGNOSTIC_COUNTS = "256,512,768,1024,1536,2048,3072,4096"
+MINIMUM_LANDMARK_DIAGNOSTIC_SEEDS = "123,456,789"
+
+ATLAS_INFO = {
+    "kidney_atac": {
+        "preprocess_script": "scripts/01_1_preprocessing_kidney_atac.R",
+    },
+    "heca_atac": {
+        "preprocess_script": "scripts/01_2_preprocessing_heca_atac.R",
+    },
+    "fetal_atac": {
+        "preprocess_script": "scripts/01_3_preprocessing_fetal_atac.R",
+    },
+}
+
+
+def preprocess_script(wc):
+    return ATLAS_INFO[wc.atlas]["preprocess_script"]
+
+
+# ---------------------------------
+# Final targets
+# ---------------------------------
+
+rule all:
+    input:
+        expand(
+            "data/processed/{atlas}/{atlas}_barebones_seurat.rds",
+            atlas=ATLASES,
+        ),
+        expand(
+            "results/anndata/{atlas}/{atlas}_peakvi_input.h5ad",
+            atlas=ATLASES,
+        ),
+        expand(
+            "results/peakvi/{atlas}/{atlas}_peakvi_latent.tsv",
+            atlas=ATLASES,
+        ),
+        expand(
+            "results/peakvi/{atlas}/peakvi_training_history.tsv",
+            atlas=ATLASES,
+        ),
+        expand(
+            "figures/peakvi_convergence/{atlas}/peakvi_convergence_loss.png",
+            atlas=ATLASES,
+        ),
+        expand(
+            "results/peakvi/{atlas}/peakvi_run_summary.json",
+            atlas=ATLASES,
+        ),
+        expand(
+            "results/peakvi/{atlas}/{atlas}_peakvi.h5ad",
+            atlas=ATLASES,
+        ),
+        expand(
+            "results/cell_names/{atlas}/{atlas}_cell_names.txt",
+            atlas=ATLASES,
+        ),
+        expand(
+            "results/cell_metadata/{atlas}/{atlas}_cell_metadata.tsv",
+            atlas=ATLASES,
+        ),
+        expand(
+            "results/peakvi_landmark_features/{atlas}/peakvi_rbf_landmark_features.npy",
+            atlas=ATLASES,
+        ),
+        expand(
+            "results/peakvi_landmark_features/{atlas}/peakvi_landmark_centroids.npy",
+            atlas=ATLASES,
+        ),
+        expand(
+            "results/peakvi_landmark_features/{atlas}/peakvi_landmark_metadata.json",
+            atlas=ATLASES,
+        ),
+        expand(
+            "results/peakvi_landmark_features/{atlas}/peakvi_landmark_sigma.tsv",
+            atlas=ATLASES,
+        ),
+        expand(
+            "results/subset_selection/peakvi/{atlas}/selected_cells_peakvi_{frac}.txt",
+            atlas=ATLASES,
+            frac=FRACTIONS.keys(),
+        ),
+        expand(
+            "results/subset_selection/peakvi/{atlas}/subset_selection_summary_peakvi_{frac}.tsv",
+            atlas=ATLASES,
+            frac=FRACTIONS.keys(),
+        ),
+        expand(
+            "results/cell_type_proportions/peakvi/{atlas}/cell_type_proportions_peakvi.tsv",
+            atlas=ATLASES,
+        ),
+        expand(
+            "results/cell_type_proportions/peakvi/{atlas}/cell_type_fractions_tidy.tsv",
+            atlas=ATLASES,
+        ),
+        expand(
+            "figures/cell_type_alluvial/peakvi/{atlas}/cell_type_alluvial_peakvi_subsets_to_full.png",
+            atlas=ATLASES,
+        ),
+        expand(
+            "figures/cell_type_heatmap/peakvi/{atlas}/cell_type_enrichment_heatmap.png",
+            atlas=ATLASES,
+        ),
+        expand(
+            "figures/cell_type_fraction_heatmap/peakvi/{atlas}/cell_type_fraction_heatmap.png",
+            atlas=ATLASES,
+        ),
+        expand(
+            "figures/peakvi_latent_heatmap/all_cell_types/{atlas}/peakvi_latent_all_cell_types_heatmap.png",
+            atlas=ATLASES,
+        ),
+        expand(
+            "results/peakvi_latent_heatmap/all_cell_types/{atlas}/peakvi_latent_all_cell_types_summary.tsv",
+            atlas=ATLASES,
+        ),
+        expand(
+            "figures/peakvi_latent_heatmap/per_cell_three_groups/{atlas}/peakvi_latent_per_cell_three_groups_heatmap.png",
+            atlas=ATLASES,
+        ),
+        expand(
+            "results/peakvi_latent_heatmap/per_cell_three_groups/{atlas}/peakvi_latent_per_cell_three_groups_summary.tsv",
+            atlas=ATLASES,
+        ),
+        expand(
+            "results/umap_peakvi/{atlas}/{atlas}_peakvi_umap.tsv",
+            atlas=ATLASES,
+        ),
+        expand(
+            "results/umap_peakvi/{atlas}/peakvi_umap.done",
+            atlas=ATLASES,
+        ),
+        expand(
+            "figures/umap_peakvi/subset_overlay/{atlas}/umap_subset_overlay_peakvi_{frac}.png",
+            atlas=ATLASES,
+            frac=FRACTIONS.keys(),
+        ),
+        expand(
+            "figures/umap_peakvi_library_size/subset_overlay/{atlas}/umap_subset_overlay_peakvi_library_size_{frac}.png",
+            atlas=ATLASES,
+            frac=FRACTIONS.keys(),
+        ),
+        expand(
+            "results/signac_da/{atlas}/{dataset_size}/signac_da_peaks.tsv",
+            atlas=ATLASES,
+            dataset_size=SIGNAC_DA_DATASET_SIZES,
+        ),
+        expand(
+            "results/signac_da/{atlas}/{dataset_size}/signac_da_status.tsv",
+            atlas=ATLASES,
+            dataset_size=SIGNAC_DA_DATASET_SIZES,
+        ),
+        expand(
+            "results/signac_da/{atlas}/{dataset_size}/signac_da_reference_effects.tsv",
+            atlas=ATLASES,
+            dataset_size=SIGNAC_DA_DATASET_SIZES,
+        ),
+        expand(
+            "results/signac_da_capture/{atlas}/da_peak_capture_summary.tsv",
+            atlas=ATLASES,
+        ),
+        expand(
+            "results/signac_da_capture/{atlas}/da_peak_overlap_details.tsv",
+            atlas=ATLASES,
+        ),
+        expand(
+            "figures/signac_da/{atlas}/da_capture_heatmap.png",
+            atlas=ATLASES,
+        ),
+        expand(
+            "figures/signac_da/{atlas}/da_capture_trajectories.png",
+            atlas=ATLASES,
+        ),
+        expand(
+            "figures/signac_da/{atlas}/da_capture_bubble_heatmap.png",
+            atlas=ATLASES,
+        ),
+        expand(
+            "results/signac_da_capture/{atlas}/effect_histogram_manifest.tsv",
+            atlas=ATLASES,
+        ),
+        "figures/publication/peakvi_subset_overlay_3x5.png",
+        "figures/publication/peakvi_subset_overlay_3x5.pdf",
+        "results/publication_panels/peakvi_subset_overlay_3x5_summary.tsv",
+        "figures/publication/signac_da_recapitulation_3x5.png",
+        "figures/publication/signac_da_recapitulation_3x5.pdf",
+        "results/publication_panels/signac_da_recapitulation_3x5_summary.tsv",
+
+# ---------------------------------
+# TEMPORARY DIAGNOSTIC TARGET
+# Run explicitly; intentionally excluded from rule all.
+# ---------------------------------
+
+rule temporary_peakvi_separability_diagnostics:
+    input:
+        expand(
+            (
+                "diagnostics/peakvi_celltype_separability/{atlas}/"
+                "cell_type_separability.tsv"
+            ),
+            atlas=ATLASES,
+        ),
+        expand(
+            (
+                "diagnostics/peakvi_celltype_separability/{atlas}/"
+                "subset_retention_summary.tsv"
+            ),
+            atlas=ATLASES,
+        ),
+        expand(
+            (
+                "diagnostics/peakvi_celltype_separability/{atlas}/figures/"
+                "separability_vs_enrichment_{frac}.png"
+            ),
+            atlas=ATLASES,
+            frac=LEGACY_DIAGNOSTIC_FRACTIONS.keys(),
+        ),
+
+
+# ---------------------------------
+# TEMPORARY FEATUREBASED-SELECTION DIAGNOSTIC TARGET
+# Run explicitly; intentionally excluded from rule all.
+# ---------------------------------
+
+rule temporary_featurebased_selection_behavior_diagnostics:
+    input:
+        expand(
+            (
+                "diagnostics/featurebased_selection_behavior/{atlas}/"
+                "cell_type_featurebased_diagnostics.tsv"
+            ),
+            atlas=ATLASES,
+        ),
+        expand(
+            (
+                "diagnostics/featurebased_selection_behavior/{atlas}/"
+                "latent_distribution_summary.tsv"
+            ),
+            atlas=ATLASES,
+        ),
+        expand(
+            (
+                "diagnostics/featurebased_selection_behavior/{atlas}/"
+                "missed_high_purity_feature_profiles.tsv"
+            ),
+            atlas=ATLASES,
+        ),
+        expand(
+            (
+                "diagnostics/featurebased_selection_behavior/{atlas}/figures/"
+                "knn_purity_vs_singleton_score.png"
+            ),
+            atlas=ATLASES,
+        ),
+        expand(
+            (
+                "diagnostics/featurebased_selection_behavior/{atlas}/figures/"
+                "knn_purity_vs_residual_gain_{frac}.png"
+            ),
+            atlas=ATLASES,
+            frac=LEGACY_DIAGNOSTIC_FRACTIONS.keys(),
+        ),
+        expand(
+            (
+                "diagnostics/featurebased_selection_behavior/{atlas}/figures/"
+                "high_purity_missed_feature_profiles.png"
+            ),
+            atlas=ATLASES,
+        ),
+
+# ---------------------------------
+
+# ---------------------------------
+# TEMPORARY DENSITY-WEIGHTED ABLATION TARGET
+# Fetal 2% only; intentionally excluded from rule all.
+# ---------------------------------
+
+rule temporary_density_weighted_ablation:
+    input:
+        "diagnostics/density_weighted_ablation/fetal_atac/02pct/density_ablation_summary.tsv",
+        "diagnostics/density_weighted_ablation/fetal_atac/02pct/density_ablation_cell_type_details.tsv",
+        "diagnostics/density_weighted_ablation/fetal_atac/02pct/density_ablation_overview.png",
+        "diagnostics/density_weighted_ablation/fetal_atac/02pct/density_ablation.done",
+
+# ---------------------------------
+# TEMPORARY FIXED DENSITY-WEIGHT GENERALIZATION TARGET
+# Fetal + kidney only; intentionally excluded from rule all and downstream DA.
+# ---------------------------------
+
+rule temporary_density_weighted_generalization:
+    input:
+        (
+            "diagnostics/density_weighted_generalization/"
+            "density_generalization_summary.tsv"
+        ),
+        (
+            "diagnostics/density_weighted_generalization/"
+            "density_generalization_cell_type_details.tsv"
+        ),
+        (
+            "diagnostics/density_weighted_generalization/"
+            "density_generalization_changes.tsv"
+        ),
+        (
+            "diagnostics/density_weighted_generalization/"
+            "density_generalization.done"
+        ),
+
+# ---------------------------------
+# TEMPORARY KIDNEY-ONLY DENSITY-CAP DIAGNOSTIC TARGET
+# Intentionally excluded from rule all, fetal, HECA, and downstream DA.
+# ---------------------------------
+
+rule temporary_kidney_density_cap_diagnostic:
+    input:
+        (
+            "diagnostics/kidney_density_cap_ablation/"
+            "kidney_density_cap_summary.tsv"
+        ),
+        (
+            "diagnostics/kidney_density_cap_ablation/"
+            "kidney_density_cap_ablation.done"
+        ),
+        (
+            "diagnostics/kidney_density_cap_ablation/"
+            "mes_macula_densa_focused_diagnostic.tsv"
+        ),
+        (
+            "diagnostics/kidney_density_cap_ablation/"
+            "mes_macula_densa_diagnostic.done"
+        ),
+
+# ---------------------------------
+# TEMPORARY HYBRID RBF + DENSITY-RBF DIAGNOSTIC TARGET
+# Intentionally excluded from rule all and downstream DA.
+# ---------------------------------
+
+rule temporary_hybrid_rbf_density_ablation:
+    input:
+        (
+            "diagnostics/hybrid_rbf_density_ablation/"
+            "hybrid_method_summary.tsv"
+        ),
+        (
+            "diagnostics/hybrid_rbf_density_ablation/"
+            "hybrid_cell_type_details.tsv"
+        ),
+        (
+            "diagnostics/hybrid_rbf_density_ablation/"
+            "hybrid_rbf_density_ablation.done"
+        ),
+
+# ---------------------------------
+# TEMPORARY HYBRID 2% GREEDY-COMPETITION DIAGNOSTIC TARGET
+# Read-only replay; intentionally excluded from rule all and downstream DA.
+# ---------------------------------
+
+rule temporary_hybrid_greedy_competition_diagnostic:
+    input:
+        expand(
+            "diagnostics/hybrid_greedy_competition/{atlas}/greedy_competition_trajectory.tsv",
+            atlas=HYBRID_RBF_DENSITY_ATLASES,
+        ),
+        expand(
+            "diagnostics/hybrid_greedy_competition/{atlas}/greedy_competition_summary.tsv",
+            atlas=HYBRID_RBF_DENSITY_ATLASES,
+        ),
+        expand(
+            "diagnostics/hybrid_greedy_competition/{atlas}/greedy_competition_gain_ratio.png",
+            atlas=HYBRID_RBF_DENSITY_ATLASES,
+        ),
+        expand(
+            "diagnostics/hybrid_greedy_competition/{atlas}/diagnostic.done",
+            atlas=HYBRID_RBF_DENSITY_ATLASES,
+        ),
+
+# Step 1: preprocess each atlas to raw-count Seurat object
+# ---------------------------------
+
+rule preprocess_atlas:
+    input:
+        script=preprocess_script
+    output:
+        rds="data/processed/{atlas}/{atlas}_barebones_seurat.rds"
+    log:
+        "logs/preprocessing/{atlas}.log"
+    benchmark:
+        "logs/benchmarking/preprocessing/{atlas}.tsv"
+    threads: 1
+    resources:
+        mem_mb=256000,
+        runtime=1440
+    shell:
+        r"""
+        set +u
+        eval "$(conda shell.bash hook)"
+        conda activate r_env2
+        set -u
+        export TMPDIR=${{TMPDIR:-/tmp}}
+        export MPLCONFIGDIR=${{MPLCONFIGDIR:-/tmp/mpl-$USER-$SLURM_JOB_ID}}
+        Rscript {input.script} > {log} 2>&1
+        """
+
+
+# ---------------------------------
+# Step 2.1: convert Seurat raw counts to AnnData for PeakVI
+# ---------------------------------
+
+rule convert_seurat_to_anndata:
+    input:
+        rds="data/processed/{atlas}/{atlas}_barebones_seurat.rds"
+    output:
+        export_dir=directory("results/anndata/{atlas}/sparse_export"),
+        h5ad="results/anndata/{atlas}/{atlas}_peakvi_input.h5ad"
+    log:
+        "logs/anndata/{atlas}.log"
+    benchmark:
+        "logs/benchmarking/anndata/{atlas}.tsv"
+    threads: 1
+    resources:
+        mem_mb=128000,
+        runtime=720
+    params:
+        chunk_size=5000
+    shell:
+        r"""
+        set +u
+        eval "$(conda shell.bash hook)"
+        conda activate r_env2
+        set -u
+        export TMPDIR=${{TMPDIR:-/tmp}}
+        export MPLCONFIGDIR=${{MPLCONFIGDIR:-/tmp/mpl-$USER-$SLURM_JOB_ID}}
+        Rscript scripts/02_1_export_seurat_counts_for_anndata.R             {input.rds}             {output.export_dir}             {params.chunk_size}             > {log} 2>&1
+
+        set +u
+        conda activate scvi
+        set -u
+        python scripts/02_2_build_peakvi_anndata.py             --input_dir {output.export_dir}             --output_h5ad {output.h5ad}             >> {log} 2>&1
+        """
+
+
+# ---------------------------------
+# Step 2.2: train PeakVI and export latent representation
+# ---------------------------------
+
+rule run_peakvi:
+    input:
+        h5ad="results/anndata/{atlas}/{atlas}_peakvi_input.h5ad"
+    output:
+        model_dir=directory("results/peakvi/{atlas}/model"),
+        latent_tsv="results/peakvi/{atlas}/{atlas}_peakvi_latent.tsv",
+        latent_npy="results/peakvi/{atlas}/peakvi_latent.npy",
+        cell_names="results/peakvi/{atlas}/cell_names.txt",
+        history_tsv="results/peakvi/{atlas}/peakvi_training_history.tsv",
+        convergence_png="figures/peakvi_convergence/{atlas}/peakvi_convergence_loss.png",
+        summary="results/peakvi/{atlas}/peakvi_run_summary.json",
+        h5ad="results/peakvi/{atlas}/{atlas}_peakvi.h5ad"
+    log:
+        "logs/peakvi/{atlas}.log"
+    benchmark:
+        "logs/benchmarking/peakvi/{atlas}.tsv"
+    threads: 8
+    resources:
+        mem_mb=256000,
+        runtime=2880,
+        slurm_partition="gpu",
+        slurm_account="cedar",
+        slurm_extra='-G "a40:1"'
+    params:
+        output_dir=lambda wc: f"results/peakvi/{wc.atlas}",
+        n_latent=PEAKVI_N_LATENT,
+        latent_distribution=PEAKVI_LATENT_DISTRIBUTION,
+        max_epochs=PEAKVI_MAX_EPOCHS,
+        epoch_multiplier=PEAKVI_EPOCH_MULTIPLIER,
+        batch_size=PEAKVI_BATCH_SIZE,
+        random_seed=PEAKVI_RANDOM_SEED,
+        early_stopping_patience=PEAKVI_EARLY_STOPPING_PATIENCE,
+        dataloader_workers=PEAKVI_DATALOADER_WORKERS,
+        epochs_cap=PEAKVI_EPOCHS_CAP,
+        decay_at_n_obs=PEAKVI_DECAY_AT_N_OBS
+    shell:
+        r"""
+        set +u
+        eval "$(conda shell.bash hook)"
+        conda activate scvi
+        set -u
+        export TMPDIR=${{TMPDIR:-/tmp}}
+        export MPLCONFIGDIR=${{MPLCONFIGDIR:-/tmp/mpl-$USER-$SLURM_JOB_ID}}
+        python scripts/02_3_run_peakvi.py \
+            --input_h5ad {input.h5ad} \
+            --atlas {wildcards.atlas} \
+            --output_dir {params.output_dir} \
+            --latent_tsv {output.latent_tsv} \
+            --output_h5ad {output.h5ad} \
+            --history_tsv {output.history_tsv} \
+            --convergence_png {output.convergence_png} \
+            --n_latent {params.n_latent} \
+            --latent_distribution {params.latent_distribution} \
+            --max_epochs {params.max_epochs} \
+            --epoch_multiplier {params.epoch_multiplier} \
+            --epochs_cap {params.epochs_cap} \
+            --decay_at_n_obs {params.decay_at_n_obs} \
+            --batch_size {params.batch_size} \
+            --early_stopping false \
+            --early_stopping_patience {params.early_stopping_patience} \
+            --dataloader_workers {params.dataloader_workers} \
+            --accelerator gpu \
+            --random_seed {params.random_seed} \
+            > {log} 2>&1
+        """
+
+
+# ---------------------------------
+# Step 2.3: extract cell names
+# ---------------------------------
+
+rule extract_cell_names:
+    input:
+        rds="data/processed/{atlas}/{atlas}_barebones_seurat.rds"
+    output:
+        txt="results/cell_names/{atlas}/{atlas}_cell_names.txt"
+    log:
+        "logs/cell_names/{atlas}.log"
+    benchmark:
+        "logs/benchmarking/cell_names/{atlas}.tsv"
+    threads: 1
+    resources:
+        mem_mb=16000,
+        runtime=120
+    shell:
+        r"""
+        set +u
+        eval "$(conda shell.bash hook)"
+        conda activate r_env2
+        set -u
+        export TMPDIR=${{TMPDIR:-/tmp}}
+        export MPLCONFIGDIR=${{MPLCONFIGDIR:-/tmp/mpl-$USER-$SLURM_JOB_ID}}
+        Rscript scripts/02_4_extract_cell_names.R             {input.rds}             {output.txt}             > {log} 2>&1
+        """
+
+
+# ---------------------------------
+# Step 2.4: export per-cell metadata
+# ---------------------------------
+
+rule export_cell_metadata:
+    input:
+        rds="data/processed/{atlas}/{atlas}_barebones_seurat.rds"
+    output:
+        tsv="results/cell_metadata/{atlas}/{atlas}_cell_metadata.tsv"
+    log:
+        "logs/cell_metadata/{atlas}.log"
+    benchmark:
+        "logs/benchmarking/cell_metadata/{atlas}.tsv"
+    threads: 1
+    resources:
+        mem_mb=16000,
+        runtime=120
+    shell:
+        r"""
+        set +u
+        eval "$(conda shell.bash hook)"
+        conda activate r_env2
+        set -u
+        export TMPDIR=${{TMPDIR:-/tmp}}
+        export MPLCONFIGDIR=${{MPLCONFIGDIR:-/tmp/mpl-$USER-$SLURM_JOB_ID}}
+        Rscript scripts/02_5_export_cell_metadata.R             {input.rds}             {output.tsv}             > {log} 2>&1
+        """
+
+
+# ---------------------------------
+# Step 3.1: build annotation-blind PeakVI RBF landmark features
+# One shared feature matrix is built per atlas and reused for all fractions.
+# ---------------------------------
+
+rule build_peakvi_landmark_features:
+    input:
+        script="scripts/03_subset_selection_on_peakvi.py",
+        latent_npy="results/peakvi/{atlas}/peakvi_latent.npy",
+        cell_names="results/peakvi/{atlas}/cell_names.txt",
+        peakvi_summary="results/peakvi/{atlas}/peakvi_run_summary.json"
+    output:
+        features=(
+            "results/peakvi_landmark_features/{atlas}/"
+            "peakvi_rbf_landmark_features.npy"
+        ),
+        centroids=(
+            "results/peakvi_landmark_features/{atlas}/"
+            "peakvi_landmark_centroids.npy"
+        ),
+        metadata=(
+            "results/peakvi_landmark_features/{atlas}/"
+            "peakvi_landmark_metadata.json"
+        ),
+        sigma=(
+            "results/peakvi_landmark_features/{atlas}/"
+            "peakvi_landmark_sigma.tsv"
+        )
+    log:
+        "logs/subset_selection/peakvi_landmarks/{atlas}.log"
+    benchmark:
+        "logs/benchmarking/subset_selection/peakvi_landmarks/{atlas}.tsv"
+    threads: 4
+    resources:
+        mem_mb=16000,
+        runtime=720,
+        slurm_account="cedar"
+    params:
+        n_landmarks=PEAKVI_LANDMARK_N,
+        latent_distribution=PEAKVI_LATENT_DISTRIBUTION,
+        random_seed=PEAKVI_LANDMARK_RANDOM_SEED,
+        kmeans_batch_size=PEAKVI_LANDMARK_KMEANS_BATCH_SIZE,
+        kmeans_max_iter=PEAKVI_LANDMARK_KMEANS_MAX_ITER,
+        kmeans_n_init=PEAKVI_LANDMARK_KMEANS_N_INIT,
+        kmeans_max_no_improvement=PEAKVI_LANDMARK_KMEANS_MAX_NO_IMPROVEMENT,
+        kmeans_reassignment_ratio=PEAKVI_LANDMARK_KMEANS_REASSIGNMENT_RATIO,
+        distance_chunk_size=PEAKVI_LANDMARK_DISTANCE_CHUNK_SIZE
+    shell:
+        r"""
+        set +u
+        eval "$(conda shell.bash hook)"
+        conda activate myenv
+        set -u
+
+        export TMPDIR=${{TMPDIR:-/tmp}}
+        export OMP_NUM_THREADS={threads}
+        export MKL_NUM_THREADS={threads}
+        export OPENBLAS_NUM_THREADS={threads}
+
+        python {input.script} \
+            --mode build_features \
+            --atlas {wildcards.atlas} \
+            --latent_npy {input.latent_npy} \
+            --cell_names {input.cell_names} \
+            --peakvi_run_summary {input.peakvi_summary} \
+            --feature_matrix {output.features} \
+            --centroids {output.centroids} \
+            --landmark_metadata {output.metadata} \
+            --sigma_tsv {output.sigma} \
+            --n_landmarks {params.n_landmarks} \
+            --latent_distribution {params.latent_distribution} \
+            --random_seed {params.random_seed} \
+            --kmeans_batch_size {params.kmeans_batch_size} \
+            --kmeans_max_iter {params.kmeans_max_iter} \
+            --kmeans_n_init {params.kmeans_n_init} \
+            --kmeans_max_no_improvement {params.kmeans_max_no_improvement} \
+            --kmeans_reassignment_ratio {params.kmeans_reassignment_ratio} \
+            --distance_chunk_size {params.distance_chunk_size} \
+            > {log} 2>&1
+        """
+
+
+# ---------------------------------
+# Step 3.2: compute annotation-blind PeakVI-space density weights
+# ---------------------------------
+
+rule compute_peakvi_density_weights:
+    input:
+        script="scripts/03_1_compute_peakvi_density_weights.py",
+        latent_npy="results/peakvi/{atlas}/peakvi_latent.npy",
+        cell_names="results/peakvi/{atlas}/cell_names.txt"
+    output:
+        sparsity=(
+            "results/peakvi_density_weights/{atlas}/"
+            "peakvi_knn_sparsity.npz"
+        ),
+        summary=(
+            "results/peakvi_density_weights/{atlas}/"
+            "peakvi_density_summary.tsv"
+        )
+    log:
+        "logs/subset_selection/peakvi_density/{atlas}.log"
+    benchmark:
+        "logs/benchmarking/subset_selection/peakvi_density/{atlas}.tsv"
+    threads: 2
+    resources:
+        mem_mb=8000,
+        runtime=2880,
+        slurm_account="cedar"
+    params:
+        knn_k=PEAKVI_DENSITY_KNN_K,
+        random_seed=PEAKVI_RANDOM_SEED
+    shell:
+        r"""
+        set +u
+        eval "$(conda shell.bash hook)"
+        conda activate scvi
+        set -u
+
+        export TMPDIR=${{TMPDIR:-/tmp}}
+        export OMP_NUM_THREADS={threads}
+        export MKL_NUM_THREADS={threads}
+        export OPENBLAS_NUM_THREADS={threads}
+
+        python {input.script:q} \
+            --latent_npy {input.latent_npy:q} \
+            --cell_names {input.cell_names:q} \
+            --atlas {wildcards.atlas:q} \
+            --output_npz {output.sparsity:q} \
+            --output_summary {output.summary:q} \
+            --knn_k {params.knn_k} \
+            --threads {threads} \
+            --random_seed {params.random_seed} \
+            > {log:q} 2>&1
+        """
+
+
+# ---------------------------------
+# Step 3.2: select one subset from unweighted RBF landmark features
+# One independent job per atlas and subset fraction.
+# ---------------------------------
+
+rule subset_selection_peakvi:
+    input:
+        script="scripts/03_subset_selection_on_peakvi.py",
+        cell_names="results/peakvi/{atlas}/cell_names.txt",
+        features=(
+            "results/peakvi_landmark_features/{atlas}/"
+            "peakvi_rbf_landmark_features.npy"
+        ),
+        centroids=(
+            "results/peakvi_landmark_features/{atlas}/"
+            "peakvi_landmark_centroids.npy"
+        ),
+        metadata=(
+            "results/peakvi_landmark_features/{atlas}/"
+            "peakvi_landmark_metadata.json"
+        ),
+        sigma=(
+            "results/peakvi_landmark_features/{atlas}/"
+            "peakvi_landmark_sigma.tsv"
+        )
+    output:
+        selected_cells=(
+            "results/subset_selection/peakvi/{atlas}/"
+            "selected_cells_peakvi_{frac}.txt"
+        ),
+        summary=(
+            "results/subset_selection/peakvi/{atlas}/"
+            "subset_selection_summary_peakvi_{frac}.tsv"
+        )
+    log:
+        "logs/subset_selection/peakvi/{atlas}_{frac}.log"
+    benchmark:
+        "logs/benchmarking/subset_selection/peakvi/{atlas}_{frac}.tsv"
+    threads: 2
+    resources:
+        mem_mb=32000,
+        runtime=2880,
+        slurm_account="cedar"
+    params:
+        outdir=lambda wc: (
+            f"results/subset_selection/peakvi/{wc.atlas}"
+        ),
+        fraction=lambda wc: FRACTIONS[wc.frac],
+        random_seed=PEAKVI_LANDMARK_RANDOM_SEED
+    wildcard_constraints:
+        frac="02pct|04pct|06pct|08pct|10pct"
+    shell:
+        r"""
+        set +u
+        eval "$(conda shell.bash hook)"
+        conda activate myenv
+        set -u
+
+        export TMPDIR=${{TMPDIR:-/tmp}}
+        export MPLCONFIGDIR=${{MPLCONFIGDIR:-/tmp/mpl-$USER-$SLURM_JOB_ID}}
+
+        python {input.script} \
+            --mode select \
+            --atlas {wildcards.atlas} \
+            --cell_names {input.cell_names} \
+            --feature_matrix {input.features} \
+            --centroids {input.centroids} \
+            --landmark_metadata {input.metadata} \
+            --sigma_tsv {input.sigma} \
+            --outdir {params.outdir} \
+            --fraction {params.fraction} \
+            --random_seed {params.random_seed} \
+            > {log} 2>&1
+        """
+
+
+# ---------------------------------
+# TEMPORARY DIAGNOSTIC: one shared density cap across all atlases at 5%
+# Cell-type labels are loaded only after each annotation-blind selection.
+# ---------------------------------
+
+rule run_common_density_cap_05pct_ablation:
+    input:
+        script="diagnostics/run_density_weighted_selection_ablation.py",
+        features=(
+            "results/peakvi_landmark_features/{atlas}/"
+            "peakvi_rbf_landmark_features.npy"
+        ),
+        cell_names="results/peakvi/{atlas}/cell_names.txt",
+        sparsity=(
+            "results/peakvi_density_weights/{atlas}/"
+            "peakvi_knn_sparsity.npz"
+        ),
+        baseline=(
+            "results/subset_selection/peakvi/{atlas}/"
+            "selected_cells_peakvi_05pct.txt"
+        ),
+        metadata="results/cell_metadata/{atlas}/{atlas}_cell_metadata.tsv"
+    output:
+        summary=(
+            "diagnostics/common_density_cap_05pct/{atlas}/"
+            "density_ablation_summary.tsv"
+        ),
+        details=(
+            "diagnostics/common_density_cap_05pct/{atlas}/"
+            "density_ablation_cell_type_details.tsv"
+        ),
+        figure=(
+            "diagnostics/common_density_cap_05pct/{atlas}/"
+            "density_ablation_overview.png"
+        ),
+        done=(
+            "diagnostics/common_density_cap_05pct/{atlas}/"
+            "density_ablation.done"
+        )
+    log:
+        "logs/diagnostics/common_density_cap_05pct/{atlas}.log"
+    benchmark:
+        "logs/benchmarking/diagnostics/common_density_cap_05pct/{atlas}.tsv"
+    threads: 2
+    resources:
+        mem_mb=32000,
+        runtime=2880,
+        slurm_account="cedar"
+    params:
+        output_dir=lambda wc: (
+            f"diagnostics/common_density_cap_05pct/{wc.atlas}"
+        ),
+        max_weights=COMMON_DENSITY_CAP_05PCT_WEIGHTS,
+        rare_threshold=0.01,
+        random_seed=PEAKVI_RANDOM_SEED
+    shell:
+        r"""
+        set +u
+        eval "$(conda shell.bash hook)"
+        conda activate myenv
+        set -u
+
+        export TMPDIR=${{TMPDIR:-/tmp}}
+        export MPLCONFIGDIR=${{MPLCONFIGDIR:-/tmp/mpl-$USER-$SLURM_JOB_ID}}
+        export OMP_NUM_THREADS={threads}
+        export MKL_NUM_THREADS={threads}
+        export OPENBLAS_NUM_THREADS={threads}
+
+        python {input.script:q} \
+            --feature_matrix {input.features:q} \
+            --cell_names {input.cell_names:q} \
+            --sparsity_npz {input.sparsity:q} \
+            --baseline_selected_cells {input.baseline:q} \
+            --metadata_tsv {input.metadata:q} \
+            --atlas {wildcards.atlas:q} \
+            --fraction 0.05 \
+            --fraction_label 05pct \
+            --output_dir {params.output_dir:q} \
+            --max_weights {params.max_weights:q} \
+            --rare_threshold {params.rare_threshold} \
+            --random_seed {params.random_seed} \
+            > {log:q} 2>&1
+        """
+
+
+rule summarize_common_density_cap_05pct:
+    input:
+        script="diagnostics/summarize_common_density_cap_05pct.py",
+        summaries=expand(
+            "diagnostics/common_density_cap_05pct/{atlas}/"
+            "density_ablation_summary.tsv",
+            atlas=ATLASES,
+        ),
+        details=expand(
+            "diagnostics/common_density_cap_05pct/{atlas}/"
+            "density_ablation_cell_type_details.tsv",
+            atlas=ATLASES,
+        )
+    output:
+        summary=(
+            "diagnostics/common_density_cap_05pct/"
+            "common_density_cap_summary.tsv"
+        ),
+        recommendation=(
+            "diagnostics/common_density_cap_05pct/"
+            "recommended_common_density_cap.tsv"
+        ),
+        done=(
+            "diagnostics/common_density_cap_05pct/"
+            "common_density_cap.done"
+        )
+    log:
+        "logs/diagnostics/common_density_cap_05pct/summary.log"
+    benchmark:
+        "logs/benchmarking/diagnostics/common_density_cap_05pct/summary.tsv"
+    threads: 1
+    resources:
+        mem_mb=4000,
+        runtime=60,
+        slurm_account="cedar"
+    shell:
+        r"""
+        set +u
+        eval "$(conda shell.bash hook)"
+        conda activate scvi
+        set -u
+
+        python {input.script:q} \
+            --summaries {input.summaries:q} \
+            --details {input.details:q} \
+            --output_summary {output.summary:q} \
+            --output_recommendation {output.recommendation:q} \
+            --output_done {output.done:q} \
+            > {log:q} 2>&1
+        """
+
+
+# ---------------------------------
+# TEMPORARY DIAGNOSTIC: retrospective PeakVI cell-type separability
+# Read-only analysis of existing PeakVI and Apricot outputs.
+# ---------------------------------
+
+rule diagnose_peakvi_celltype_separability:
+    input:
+        script="diagnostics/diagnose_peakvi_celltype_separability.py",
+        latent_npy="results/peakvi/{atlas}/peakvi_latent.npy",
+        cell_ids="results/peakvi/{atlas}/cell_names.txt",
+        metadata="results/cell_metadata/{atlas}/{atlas}_cell_metadata.tsv",
+        selected=lambda wc: expand(
+            (
+                "results/subset_selection/peakvi/{atlas}/"
+                "selected_cells_peakvi_{frac}.txt"
+            ),
+            atlas=wc.atlas,
+            frac=LEGACY_DIAGNOSTIC_FRACTIONS.keys(),
+        )
+    output:
+        table=(
+            "diagnostics/peakvi_celltype_separability/{atlas}/"
+            "cell_type_separability.tsv"
+        ),
+        summary=(
+            "diagnostics/peakvi_celltype_separability/{atlas}/"
+            "subset_retention_summary.tsv"
+        ),
+        sparsity=(
+            "diagnostics/peakvi_celltype_separability/{atlas}/"
+            "per_cell_knn_sparsity.npz"
+        ),
+        fig02=(
+            "diagnostics/peakvi_celltype_separability/{atlas}/figures/"
+            "separability_vs_enrichment_02pct.png"
+        ),
+        fig04=(
+            "diagnostics/peakvi_celltype_separability/{atlas}/figures/"
+            "separability_vs_enrichment_04pct.png"
+        ),
+        fig06=(
+            "diagnostics/peakvi_celltype_separability/{atlas}/figures/"
+            "separability_vs_enrichment_06pct.png"
+        ),
+        fig08=(
+            "diagnostics/peakvi_celltype_separability/{atlas}/figures/"
+            "separability_vs_enrichment_08pct.png"
+        ),
+        fig10=(
+            "diagnostics/peakvi_celltype_separability/{atlas}/figures/"
+            "separability_vs_enrichment_10pct.png"
+        )
+    log:
+        "logs/diagnostics/peakvi_celltype_separability/{atlas}.log"
+    benchmark:
+        "logs/benchmarking/diagnostics/peakvi_celltype_separability/{atlas}.tsv"
+    threads: 4
+    resources:
+        mem_mb=8000,
+        runtime=2880,
+        slurm_account="cedar"
+    params:
+        figures_dir=lambda wc: (
+            f"diagnostics/peakvi_celltype_separability/{wc.atlas}/figures"
+        ),
+        knn_k=30,
+        silhouette_max_cells=10000,
+        high_purity_threshold=0.75,
+        max_labels=12,
+        random_seed=PEAKVI_RANDOM_SEED
+    shell:
+        r"""
+        set +u
+        eval "$(conda shell.bash hook)"
+        conda activate scvi
+        set -u
+
+        export TMPDIR=${{TMPDIR:-/tmp}}
+        export MPLCONFIGDIR=${{MPLCONFIGDIR:-/tmp/mpl-$USER-$SLURM_JOB_ID}}
+        export NUMBA_CACHE_DIR=${{TMPDIR}}/numba-$USER-${{SLURM_JOB_ID:-local}}
+        export OMP_NUM_THREADS={threads}
+        export MKL_NUM_THREADS={threads}
+        export OPENBLAS_NUM_THREADS={threads}
+
+        python {input.script:q} \
+            --latent_npy {input.latent_npy:q} \
+            --cell_ids {input.cell_ids:q} \
+            --metadata_tsv {input.metadata:q} \
+            --selected_cells {input.selected:q} \
+            --atlas {wildcards.atlas:q} \
+            --output_table {output.table:q} \
+            --output_summary {output.summary:q} \
+            --output_cell_sparsity_npz {output.sparsity:q} \
+            --output_figures_dir {params.figures_dir:q} \
+            --knn_k {params.knn_k} \
+            --silhouette_max_cells {params.silhouette_max_cells} \
+            --high_purity_threshold {params.high_purity_threshold} \
+            --max_labels {params.max_labels} \
+            --threads {threads} \
+            --random_seed {params.random_seed} \
+            > {log:q} 2>&1
+        """
+
+
+# ---------------------------------
+# TEMPORARY DIAGNOSTIC: FeatureBasedSelection behavior
+# Reuses existing PeakVI, Apricot, and separability outputs; runs no selection.
+# ---------------------------------
+
+rule diagnose_featurebased_selection_behavior:
+    input:
+        script="diagnostics/diagnose_featurebased_selection_behavior.py",
+        latent_tsv="results/peakvi/{atlas}/{atlas}_peakvi_latent.tsv",
+        metadata="results/cell_metadata/{atlas}/{atlas}_cell_metadata.tsv",
+        separability=(
+            "diagnostics/peakvi_celltype_separability/{atlas}/"
+            "cell_type_separability.tsv"
+        ),
+        selected=lambda wc: expand(
+            (
+                "results/subset_selection/peakvi/{atlas}/"
+                "selected_cells_peakvi_{frac}.txt"
+            ),
+            atlas=wc.atlas,
+            frac=LEGACY_DIAGNOSTIC_FRACTIONS.keys(),
+        ),
+        selection_summaries=lambda wc: expand(
+            (
+                "results/subset_selection/peakvi/{atlas}/"
+                "subset_selection_summary_peakvi_{frac}.tsv"
+            ),
+            atlas=wc.atlas,
+            frac=LEGACY_DIAGNOSTIC_FRACTIONS.keys(),
+        )
+    output:
+        table=(
+            "diagnostics/featurebased_selection_behavior/{atlas}/"
+            "cell_type_featurebased_diagnostics.tsv"
+        ),
+        latent_summary=(
+            "diagnostics/featurebased_selection_behavior/{atlas}/"
+            "latent_distribution_summary.tsv"
+        ),
+        feature_profiles=(
+            "diagnostics/featurebased_selection_behavior/{atlas}/"
+            "missed_high_purity_feature_profiles.tsv"
+        ),
+        singleton=(
+            "diagnostics/featurebased_selection_behavior/{atlas}/figures/"
+            "knn_purity_vs_singleton_score.png"
+        ),
+        residual02=(
+            "diagnostics/featurebased_selection_behavior/{atlas}/figures/"
+            "knn_purity_vs_residual_gain_02pct.png"
+        ),
+        residual04=(
+            "diagnostics/featurebased_selection_behavior/{atlas}/figures/"
+            "knn_purity_vs_residual_gain_04pct.png"
+        ),
+        residual06=(
+            "diagnostics/featurebased_selection_behavior/{atlas}/figures/"
+            "knn_purity_vs_residual_gain_06pct.png"
+        ),
+        residual08=(
+            "diagnostics/featurebased_selection_behavior/{atlas}/figures/"
+            "knn_purity_vs_residual_gain_08pct.png"
+        ),
+        residual10=(
+            "diagnostics/featurebased_selection_behavior/{atlas}/figures/"
+            "knn_purity_vs_residual_gain_10pct.png"
+        ),
+        heatmap=(
+            "diagnostics/featurebased_selection_behavior/{atlas}/figures/"
+            "high_purity_missed_feature_profiles.png"
+        )
+    log:
+        "logs/diagnostics/featurebased_selection_behavior/{atlas}.log"
+    benchmark:
+        "logs/benchmarking/diagnostics/featurebased_selection_behavior/{atlas}.tsv"
+    threads: 1
+    resources:
+        mem_mb=8000,
+        runtime=720,
+        slurm_account="cedar"
+    params:
+        figures_dir=lambda wc: (
+            f"diagnostics/featurebased_selection_behavior/{wc.atlas}/figures"
+        ),
+        chunk_size=100000,
+        high_purity_threshold=0.75,
+        max_labels=15
+    shell:
+        r"""
+        set +u
+        eval "$(conda shell.bash hook)"
+        conda activate scvi
+        set -u
+
+        export TMPDIR=${{TMPDIR:-/tmp}}
+        export MPLCONFIGDIR=${{MPLCONFIGDIR:-/tmp/mpl-$USER-$SLURM_JOB_ID}}
+        export OMP_NUM_THREADS={threads}
+        export MKL_NUM_THREADS={threads}
+        export OPENBLAS_NUM_THREADS={threads}
+
+        python {input.script:q} \
+            --latent_tsv {input.latent_tsv:q} \
+            --metadata_tsv {input.metadata:q} \
+            --separability_tsv {input.separability:q} \
+            --selected_cells {input.selected:q} \
+            --selection_summaries {input.selection_summaries:q} \
+            --atlas {wildcards.atlas:q} \
+            --output_table {output.table:q} \
+            --output_latent_summary {output.latent_summary:q} \
+            --output_feature_profiles {output.feature_profiles:q} \
+            --output_figures_dir {params.figures_dir:q} \
+            --chunk_size {params.chunk_size} \
+            --high_purity_threshold {params.high_purity_threshold} \
+            --max_labels {params.max_labels} \
+            > {log:q} 2>&1
+        """
+
+# ---------------------------------
+
+# ---------------------------------
+# TEMPORARY DIAGNOSTIC: capped density-weighted selection ablation
+# Uses no annotations until all selections are complete.
+# ---------------------------------
+
+rule run_density_weighted_ablation_fetal_02pct:
+    input:
+        script="diagnostics/run_density_weighted_selection_ablation.py",
+        features=(
+            "results/peakvi_landmark_features/fetal_atac/"
+            "peakvi_rbf_landmark_features.npy"
+        ),
+        cell_names="results/peakvi/fetal_atac/cell_names.txt",
+        sparsity=(
+            "diagnostics/peakvi_celltype_separability/fetal_atac/"
+            "per_cell_knn_sparsity.npz"
+        ),
+        baseline=(
+            "results/subset_selection/peakvi/fetal_atac/"
+            "selected_cells_peakvi_02pct.txt"
+        ),
+        metadata="results/cell_metadata/fetal_atac/fetal_atac_cell_metadata.tsv"
+    output:
+        summary=(
+            "diagnostics/density_weighted_ablation/fetal_atac/02pct/"
+            "density_ablation_summary.tsv"
+        ),
+        details=(
+            "diagnostics/density_weighted_ablation/fetal_atac/02pct/"
+            "density_ablation_cell_type_details.tsv"
+        ),
+        figure=(
+            "diagnostics/density_weighted_ablation/fetal_atac/02pct/"
+            "density_ablation_overview.png"
+        ),
+        selected125=(
+            "diagnostics/density_weighted_ablation/fetal_atac/02pct/"
+            "selected_cells_density_max_1p25_02pct.txt"
+        ),
+        selected150=(
+            "diagnostics/density_weighted_ablation/fetal_atac/02pct/"
+            "selected_cells_density_max_1p5_02pct.txt"
+        ),
+        selected200=(
+            "diagnostics/density_weighted_ablation/fetal_atac/02pct/"
+            "selected_cells_density_max_2p0_02pct.txt"
+        ),
+        metrics125=(
+            "diagnostics/density_weighted_ablation/fetal_atac/02pct/"
+            "selected_cell_metrics_density_max_1p25_02pct.tsv"
+        ),
+        metrics150=(
+            "diagnostics/density_weighted_ablation/fetal_atac/02pct/"
+            "selected_cell_metrics_density_max_1p5_02pct.tsv"
+        ),
+        metrics200=(
+            "diagnostics/density_weighted_ablation/fetal_atac/02pct/"
+            "selected_cell_metrics_density_max_2p0_02pct.tsv"
+        ),
+        done=(
+            "diagnostics/density_weighted_ablation/fetal_atac/02pct/"
+            "density_ablation.done"
+        )
+    log:
+        "logs/diagnostics/density_weighted_ablation/fetal_atac_02pct.log"
+    benchmark:
+        "logs/benchmarking/diagnostics/density_weighted_ablation/fetal_atac_02pct.tsv"
+    threads: 2
+    resources:
+        mem_mb=32000,
+        runtime=720,
+        slurm_account="cedar"
+    params:
+        output_dir="diagnostics/density_weighted_ablation/fetal_atac/02pct",
+        max_weights="1.25,1.5,2.0",
+        rare_threshold=0.01,
+        random_seed=PEAKVI_RANDOM_SEED
+    shell:
+        r"""
+        set +u
+        eval "$(conda shell.bash hook)"
+        conda activate myenv
+        set -u
+
+        export TMPDIR=${{TMPDIR:-/tmp}}
+        export MPLCONFIGDIR=${{MPLCONFIGDIR:-/tmp/mpl-$USER-$SLURM_JOB_ID}}
+        export OMP_NUM_THREADS={threads}
+        export MKL_NUM_THREADS={threads}
+        export OPENBLAS_NUM_THREADS={threads}
+
+        python {input.script:q} \
+            --feature_matrix {input.features:q} \
+            --cell_names {input.cell_names:q} \
+            --sparsity_npz {input.sparsity:q} \
+            --baseline_selected_cells {input.baseline:q} \
+            --metadata_tsv {input.metadata:q} \
+            --atlas fetal_atac \
+            --fraction 0.02 \
+            --fraction_label 02pct \
+            --output_dir {params.output_dir:q} \
+            --max_weights {params.max_weights:q} \
+            --rare_threshold {params.rare_threshold} \
+            --random_seed {params.random_seed} \
+            > {log:q} 2>&1
+        """
+
+# ---------------------------------
+# TEMPORARY DIAGNOSTIC: frozen max_weight=2.0 generalization
+# Selection remains annotation-blind. The existing fetal 2% result is reused.
+# ---------------------------------
+
+rule run_fixed_density_weighted_selection:
+    input:
+        script="diagnostics/run_fixed_density_weighted_selection.py",
+        features=(
+            "results/peakvi_landmark_features/{atlas}/"
+            "peakvi_rbf_landmark_features.npy"
+        ),
+        cell_names="results/peakvi/{atlas}/cell_names.txt",
+        sparsity=(
+            "diagnostics/peakvi_celltype_separability/{atlas}/"
+            "per_cell_knn_sparsity.npz"
+        ),
+        baseline=(
+            "results/subset_selection/peakvi/{atlas}/"
+            "selected_cells_peakvi_{frac}.txt"
+        )
+    output:
+        selected=(
+            "diagnostics/density_weighted_generalization/selections/"
+            "{atlas}/{frac}/selected_cells_density_max_2p0_{frac}.txt"
+        ),
+        metrics=(
+            "diagnostics/density_weighted_generalization/selections/"
+            "{atlas}/{frac}/selected_cell_metrics_density_max_2p0_{frac}.tsv"
+        ),
+        done=(
+            "diagnostics/density_weighted_generalization/selections/"
+            "{atlas}/{frac}/density_selection.done"
+        )
+    log:
+        "logs/diagnostics/density_weighted_generalization/{atlas}_{frac}.log"
+    benchmark:
+        (
+            "logs/benchmarking/diagnostics/density_weighted_generalization/"
+            "{atlas}_{frac}.tsv"
+        )
+    wildcard_constraints:
+        atlas="fetal_atac|kidney_atac",
+        frac="02pct|04pct|06pct|08pct|10pct"
+    threads: 2
+    resources:
+        mem_mb=32000,
+        runtime=720,
+        slurm_account="cedar"
+    params:
+        fraction=lambda wc: LEGACY_DIAGNOSTIC_FRACTIONS[wc.frac],
+        max_weight=2.0,
+        random_seed=PEAKVI_RANDOM_SEED
+    shell:
+        r"""
+        set +u
+        eval "$(conda shell.bash hook)"
+        conda activate myenv
+        set -u
+
+        export TMPDIR=${{TMPDIR:-/tmp}}
+        export MPLCONFIGDIR=${{MPLCONFIGDIR:-/tmp/mpl-$USER-$SLURM_JOB_ID}}
+        export OMP_NUM_THREADS={threads}
+        export MKL_NUM_THREADS={threads}
+        export OPENBLAS_NUM_THREADS={threads}
+
+        python {input.script:q} \
+            --feature_matrix {input.features:q} \
+            --cell_names {input.cell_names:q} \
+            --sparsity_npz {input.sparsity:q} \
+            --baseline_selected_cells {input.baseline:q} \
+            --fraction {params.fraction} \
+            --fraction_label {wildcards.frac:q} \
+            --output_selected_cells {output.selected:q} \
+            --output_selected_metrics {output.metrics:q} \
+            --output_done {output.done:q} \
+            --max_weight {params.max_weight} \
+            --random_seed {params.random_seed} \
+            > {log:q} 2>&1
+        """
+
+
+rule summarize_fixed_density_weighted_ablation:
+    input:
+        script="diagnostics/summarize_fixed_density_weighted_ablation.py",
+        metadata=expand(
+            "results/cell_metadata/{atlas}/{atlas}_cell_metadata.tsv",
+            atlas=DENSITY_GENERALIZATION_ATLASES,
+        ),
+        cell_names=expand(
+            "results/peakvi/{atlas}/cell_names.txt",
+            atlas=DENSITY_GENERALIZATION_ATLASES,
+        ),
+        features=expand(
+            (
+                "results/peakvi_landmark_features/{atlas}/"
+                "peakvi_rbf_landmark_features.npy"
+            ),
+            atlas=DENSITY_GENERALIZATION_ATLASES,
+        ),
+        sparsity=expand(
+            (
+                "diagnostics/peakvi_celltype_separability/{atlas}/"
+                "per_cell_knn_sparsity.npz"
+            ),
+            atlas=DENSITY_GENERALIZATION_ATLASES,
+        ),
+        baseline=expand(
+            (
+                "results/subset_selection/peakvi/{atlas}/"
+                "selected_cells_peakvi_{frac}.txt"
+            ),
+            atlas=DENSITY_GENERALIZATION_ATLASES,
+            frac=LEGACY_DIAGNOSTIC_FRACTIONS.keys(),
+        ),
+        density=DENSITY_GENERALIZATION_SELECTED
+    output:
+        summary=(
+            "diagnostics/density_weighted_generalization/"
+            "density_generalization_summary.tsv"
+        ),
+        cell_types=(
+            "diagnostics/density_weighted_generalization/"
+            "density_generalization_cell_type_details.tsv"
+        ),
+        changes=(
+            "diagnostics/density_weighted_generalization/"
+            "density_generalization_changes.tsv"
+        ),
+        done=(
+            "diagnostics/density_weighted_generalization/"
+            "density_generalization.done"
+        )
+    log:
+        "logs/diagnostics/density_weighted_generalization/summary.log"
+    benchmark:
+        "logs/benchmarking/diagnostics/density_weighted_generalization/summary.tsv"
+    threads: 1
+    resources:
+        mem_mb=16000,
+        runtime=120,
+        slurm_account="cedar"
+    params:
+        objective_chunk_size=10000
+    shell:
+        r"""
+        set +u
+        eval "$(conda shell.bash hook)"
+        conda activate scvi
+        set -u
+
+        export TMPDIR=${{TMPDIR:-/tmp}}
+        export MPLCONFIGDIR=${{MPLCONFIGDIR:-/tmp/mpl-$USER-$SLURM_JOB_ID}}
+        export OMP_NUM_THREADS={threads}
+        export MKL_NUM_THREADS={threads}
+        export OPENBLAS_NUM_THREADS={threads}
+
+        python {input.script:q} \
+            --project_dir . \
+            --output_summary {output.summary:q} \
+            --output_cell_types {output.cell_types:q} \
+            --output_changes {output.changes:q} \
+            --output_done {output.done:q} \
+            --objective_chunk_size {params.objective_chunk_size} \
+            > {log:q} 2>&1
+        """
+
+# ---------------------------------
+# TEMPORARY DIAGNOSTIC: kidney-only density cap ablation
+# Changes only max_weight; annotations are absent from every selection job.
+# ---------------------------------
+
+rule run_kidney_density_cap_selection:
+    input:
+        script="diagnostics/run_kidney_density_cap_selection.py",
+        features=(
+            "results/peakvi_landmark_features/kidney_atac/"
+            "peakvi_rbf_landmark_features.npy"
+        ),
+        cell_names="results/peakvi/kidney_atac/cell_names.txt",
+        sparsity=(
+            "diagnostics/peakvi_celltype_separability/kidney_atac/"
+            "per_cell_knn_sparsity.npz"
+        ),
+        baseline=(
+            "results/subset_selection/peakvi/kidney_atac/"
+            "selected_cells_peakvi_{frac}.txt"
+        )
+    output:
+        selected=(
+            "diagnostics/kidney_density_cap_ablation/selections/{cap}/{frac}/"
+            "selected_cells_density_max_{cap}_{frac}.txt"
+        ),
+        metrics=(
+            "diagnostics/kidney_density_cap_ablation/selections/{cap}/{frac}/"
+            "selected_cell_metrics_density_max_{cap}_{frac}.tsv"
+        ),
+        done=(
+            "diagnostics/kidney_density_cap_ablation/selections/{cap}/{frac}/"
+            "density_selection.done"
+        )
+    log:
+        "logs/diagnostics/kidney_density_cap_ablation/{cap}_{frac}.log"
+    benchmark:
+        (
+            "logs/benchmarking/diagnostics/kidney_density_cap_ablation/"
+            "{cap}_{frac}.tsv"
+        )
+    wildcard_constraints:
+        cap="1p5|1p6|1p7|1p8|1p9",
+        frac="02pct|04pct|06pct|08pct|10pct"
+    threads: 2
+    resources:
+        mem_mb=32000,
+        runtime=720,
+        slurm_account="cedar"
+    params:
+        fraction=lambda wc: LEGACY_DIAGNOSTIC_FRACTIONS[wc.frac],
+        max_weight=lambda wc: KIDNEY_DENSITY_CAPS[wc.cap],
+        random_seed=PEAKVI_RANDOM_SEED
+    shell:
+        r"""
+        set +u
+        eval "$(conda shell.bash hook)"
+        conda activate myenv
+        set -u
+
+        export TMPDIR=${{TMPDIR:-/tmp}}
+        export MPLCONFIGDIR=${{MPLCONFIGDIR:-/tmp/mpl-$USER-$SLURM_JOB_ID}}
+        export OMP_NUM_THREADS={threads}
+        export MKL_NUM_THREADS={threads}
+        export OPENBLAS_NUM_THREADS={threads}
+
+        python {input.script:q} \
+            --feature_matrix {input.features:q} \
+            --cell_names {input.cell_names:q} \
+            --sparsity_npz {input.sparsity:q} \
+            --baseline_selected_cells {input.baseline:q} \
+            --fraction {params.fraction} \
+            --fraction_label {wildcards.frac:q} \
+            --output_selected_cells {output.selected:q} \
+            --output_selected_metrics {output.metrics:q} \
+            --output_done {output.done:q} \
+            --max_weight {params.max_weight} \
+            --random_seed {params.random_seed} \
+            > {log:q} 2>&1
+        """
+
+
+rule evaluate_kidney_density_cap_ablation:
+    input:
+        script="diagnostics/evaluate_kidney_density_cap_ablation.py",
+        features=(
+            "results/peakvi_landmark_features/kidney_atac/"
+            "peakvi_rbf_landmark_features.npy"
+        ),
+        cell_names="results/peakvi/kidney_atac/cell_names.txt",
+        metadata=(
+            "results/cell_metadata/kidney_atac/"
+            "kidney_atac_cell_metadata.tsv"
+        ),
+        baseline=expand(
+            (
+                "results/subset_selection/peakvi/kidney_atac/"
+                "selected_cells_peakvi_{frac}.txt"
+            ),
+            frac=LEGACY_DIAGNOSTIC_FRACTIONS.keys(),
+        ),
+        selected=KIDNEY_DENSITY_CAP_SELECTED
+    output:
+        summary=(
+            "diagnostics/kidney_density_cap_ablation/"
+            "kidney_density_cap_summary.tsv"
+        ),
+        done=(
+            "diagnostics/kidney_density_cap_ablation/"
+            "kidney_density_cap_ablation.done"
+        )
+    log:
+        "logs/diagnostics/kidney_density_cap_ablation/evaluation.log"
+    benchmark:
+        "logs/benchmarking/diagnostics/kidney_density_cap_ablation/evaluation.tsv"
+    threads: 1
+    resources:
+        mem_mb=16000,
+        runtime=120,
+        slurm_account="cedar"
+    params:
+        objective_chunk_size=10000
+    shell:
+        r"""
+        set +u
+        eval "$(conda shell.bash hook)"
+        conda activate scvi
+        set -u
+
+        export TMPDIR=${{TMPDIR:-/tmp}}
+        export MPLCONFIGDIR=${{MPLCONFIGDIR:-/tmp/mpl-$USER-$SLURM_JOB_ID}}
+        export OMP_NUM_THREADS={threads}
+        export MKL_NUM_THREADS={threads}
+        export OPENBLAS_NUM_THREADS={threads}
+
+        python {input.script:q} \
+            --project_dir . \
+            --output_summary {output.summary:q} \
+            --output_done {output.done:q} \
+            --objective_chunk_size {params.objective_chunk_size} \
+            > {log:q} 2>&1
+        """
+
+
+rule diagnose_kidney_mes_macula_densa:
+    input:
+        script="diagnostics/diagnose_kidney_mes_macula_densa.py",
+        latent="results/peakvi/kidney_atac/peakvi_latent.npy",
+        features=(
+            "results/peakvi_landmark_features/kidney_atac/"
+            "peakvi_rbf_landmark_features.npy"
+        ),
+        centroids=(
+            "results/peakvi_landmark_features/kidney_atac/"
+            "peakvi_landmark_centroids.npy"
+        ),
+        landmark_metadata=(
+            "results/peakvi_landmark_features/kidney_atac/"
+            "peakvi_landmark_metadata.json"
+        ),
+        cell_names="results/peakvi/kidney_atac/cell_names.txt",
+        metadata=(
+            "results/cell_metadata/kidney_atac/"
+            "kidney_atac_cell_metadata.tsv"
+        ),
+        separability=(
+            "diagnostics/peakvi_celltype_separability/kidney_atac/"
+            "cell_type_separability.tsv"
+        ),
+        sparsity=(
+            "diagnostics/peakvi_celltype_separability/kidney_atac/"
+            "per_cell_knn_sparsity.npz"
+        ),
+        baseline=expand(
+            (
+                "results/subset_selection/peakvi/kidney_atac/"
+                "selected_cells_peakvi_{frac}.txt"
+            ),
+            frac=LEGACY_DIAGNOSTIC_FRACTIONS.keys(),
+        ),
+        density=expand(
+            (
+                "diagnostics/density_weighted_generalization/selections/"
+                "kidney_atac/{frac}/"
+                "selected_cells_density_max_2p0_{frac}.txt"
+            ),
+            frac=LEGACY_DIAGNOSTIC_FRACTIONS.keys(),
+        )
+    output:
+        table=(
+            "diagnostics/kidney_density_cap_ablation/"
+            "mes_macula_densa_focused_diagnostic.tsv"
+        ),
+        done=(
+            "diagnostics/kidney_density_cap_ablation/"
+            "mes_macula_densa_diagnostic.done"
+        )
+    log:
+        "logs/diagnostics/kidney_density_cap_ablation/mes_macula_densa.log"
+    benchmark:
+        (
+            "logs/benchmarking/diagnostics/kidney_density_cap_ablation/"
+            "mes_macula_densa.tsv"
+        )
+    threads: 1
+    resources:
+        mem_mb=16000,
+        runtime=240,
+        slurm_account="cedar"
+    params:
+        chunk_size=5000,
+        activation_threshold=0.5,
+        strongest_feature_count=10
+    shell:
+        r"""
+        set +u
+        eval "$(conda shell.bash hook)"
+        conda activate scvi
+        set -u
+
+        export TMPDIR=${{TMPDIR:-/tmp}}
+        export MPLCONFIGDIR=${{MPLCONFIGDIR:-/tmp/mpl-$USER-$SLURM_JOB_ID}}
+        export OMP_NUM_THREADS={threads}
+        export MKL_NUM_THREADS={threads}
+        export OPENBLAS_NUM_THREADS={threads}
+
+        python {input.script:q} \
+            --project_dir . \
+            --output_tsv {output.table:q} \
+            --output_done {output.done:q} \
+            --chunk_size {params.chunk_size} \
+            --substantial_activation_threshold {params.activation_threshold} \
+            --strongest_feature_count {params.strongest_feature_count} \
+            > {log:q} 2>&1
+        """
+
+# ---------------------------------
+# TEMPORARY DIAGNOSTIC: equal-block hybrid X + wX selection
+# No annotations are available to this selection rule.
+# ---------------------------------
+
+rule run_hybrid_rbf_density_selection:
+    input:
+        script="diagnostics/run_hybrid_rbf_density_selection.py",
+        features=(
+            "results/peakvi_landmark_features/{atlas}/"
+            "peakvi_rbf_landmark_features.npy"
+        ),
+        cell_names="results/peakvi/{atlas}/cell_names.txt",
+        sparsity=(
+            "diagnostics/peakvi_celltype_separability/{atlas}/"
+            "per_cell_knn_sparsity.npz"
+        ),
+        baseline=(
+            "results/subset_selection/peakvi/{atlas}/"
+            "selected_cells_peakvi_{frac}.txt"
+        )
+    output:
+        selected=(
+            "diagnostics/hybrid_rbf_density_ablation/selections/{atlas}/{frac}/"
+            "selected_cells_hybrid_{frac}.txt"
+        ),
+        metrics=(
+            "diagnostics/hybrid_rbf_density_ablation/selections/{atlas}/{frac}/"
+            "selected_cell_metrics_hybrid_{frac}.tsv"
+        ),
+        done=(
+            "diagnostics/hybrid_rbf_density_ablation/selections/{atlas}/{frac}/"
+            "hybrid_selection.done"
+        )
+    log:
+        "logs/diagnostics/hybrid_rbf_density_ablation/{atlas}_{frac}.log"
+    benchmark:
+        (
+            "logs/benchmarking/diagnostics/hybrid_rbf_density_ablation/"
+            "{atlas}_{frac}.tsv"
+        )
+    wildcard_constraints:
+        atlas="kidney_atac|fetal_atac",
+        frac="02pct|04pct|06pct|08pct|10pct"
+    threads: 2
+    resources:
+        mem_mb=64000,
+        runtime=720,
+        slurm_account="cedar"
+    params:
+        fraction=lambda wc: LEGACY_DIAGNOSTIC_FRACTIONS[wc.frac],
+        max_weight=2.0,
+        random_seed=PEAKVI_RANDOM_SEED
+    shell:
+        r"""
+        set +u
+        eval "$(conda shell.bash hook)"
+        conda activate myenv
+        set -u
+
+        export TMPDIR=${{TMPDIR:-/tmp}}
+        export MPLCONFIGDIR=${{MPLCONFIGDIR:-/tmp/mpl-$USER-$SLURM_JOB_ID}}
+        export OMP_NUM_THREADS={threads}
+        export MKL_NUM_THREADS={threads}
+        export OPENBLAS_NUM_THREADS={threads}
+
+        python {input.script:q} \
+            --feature_matrix {input.features:q} \
+            --cell_names {input.cell_names:q} \
+            --sparsity_npz {input.sparsity:q} \
+            --baseline_selected_cells {input.baseline:q} \
+            --fraction {params.fraction} \
+            --fraction_label {wildcards.frac:q} \
+            --output_selected_cells {output.selected:q} \
+            --output_selected_metrics {output.metrics:q} \
+            --output_done {output.done:q} \
+            --max_weight {params.max_weight} \
+            --random_seed {params.random_seed} \
+            > {log:q} 2>&1
+        """
+
+
+rule evaluate_hybrid_rbf_density_ablation:
+    input:
+        script="diagnostics/evaluate_hybrid_rbf_density_ablation.py",
+        metadata=expand(
+            "results/cell_metadata/{atlas}/{atlas}_cell_metadata.tsv",
+            atlas=HYBRID_RBF_DENSITY_ATLASES,
+        ),
+        cell_names=expand(
+            "results/peakvi/{atlas}/cell_names.txt",
+            atlas=HYBRID_RBF_DENSITY_ATLASES,
+        ),
+        features=expand(
+            (
+                "results/peakvi_landmark_features/{atlas}/"
+                "peakvi_rbf_landmark_features.npy"
+            ),
+            atlas=HYBRID_RBF_DENSITY_ATLASES,
+        ),
+        sparsity=expand(
+            (
+                "diagnostics/peakvi_celltype_separability/{atlas}/"
+                "per_cell_knn_sparsity.npz"
+            ),
+            atlas=HYBRID_RBF_DENSITY_ATLASES,
+        ),
+        unweighted=expand(
+            (
+                "results/subset_selection/peakvi/{atlas}/"
+                "selected_cells_peakvi_{frac}.txt"
+            ),
+            atlas=HYBRID_RBF_DENSITY_ATLASES,
+            frac=LEGACY_DIAGNOSTIC_FRACTIONS.keys(),
+        ),
+        density=DENSITY_GENERALIZATION_SELECTED,
+        hybrid=HYBRID_RBF_DENSITY_SELECTED
+    output:
+        summary=(
+            "diagnostics/hybrid_rbf_density_ablation/"
+            "hybrid_method_summary.tsv"
+        ),
+        cell_types=(
+            "diagnostics/hybrid_rbf_density_ablation/"
+            "hybrid_cell_type_details.tsv"
+        ),
+        done=(
+            "diagnostics/hybrid_rbf_density_ablation/"
+            "hybrid_rbf_density_ablation.done"
+        )
+    log:
+        "logs/diagnostics/hybrid_rbf_density_ablation/evaluation.log"
+    benchmark:
+        "logs/benchmarking/diagnostics/hybrid_rbf_density_ablation/evaluation.tsv"
+    threads: 1
+    resources:
+        mem_mb=16000,
+        runtime=120,
+        slurm_account="cedar"
+    params:
+        objective_chunk_size=10000
+    shell:
+        r"""
+        set +u
+        eval "$(conda shell.bash hook)"
+        conda activate scvi
+        set -u
+
+        export TMPDIR=${{TMPDIR:-/tmp}}
+        export MPLCONFIGDIR=${{MPLCONFIGDIR:-/tmp/mpl-$USER-$SLURM_JOB_ID}}
+        export OMP_NUM_THREADS={threads}
+        export MKL_NUM_THREADS={threads}
+        export OPENBLAS_NUM_THREADS={threads}
+
+        python {input.script:q} \
+            --project_dir . \
+            --output_summary {output.summary:q} \
+            --output_cell_types {output.cell_types:q} \
+            --output_done {output.done:q} \
+            --objective_chunk_size {params.objective_chunk_size} \
+            > {log:q} 2>&1
+        """
+
+rule diagnose_hybrid_greedy_competition:
+    input:
+        script="diagnostics/diagnose_hybrid_greedy_competition.py",
+        features=(
+            "results/peakvi_landmark_features/{atlas}/"
+            "peakvi_rbf_landmark_features.npy"
+        ),
+        cell_names="results/peakvi/{atlas}/cell_names.txt",
+        sparsity=(
+            "diagnostics/peakvi_celltype_separability/{atlas}/"
+            "per_cell_knn_sparsity.npz"
+        ),
+        metadata="results/cell_metadata/{atlas}/{atlas}_cell_metadata.tsv",
+        selected=(
+            "diagnostics/hybrid_rbf_density_ablation/selections/{atlas}/02pct/"
+            "selected_cells_hybrid_02pct.txt"
+        ),
+        metrics=(
+            "diagnostics/hybrid_rbf_density_ablation/selections/{atlas}/02pct/"
+            "selected_cell_metrics_hybrid_02pct.tsv"
+        )
+    output:
+        trajectory=(
+            "diagnostics/hybrid_greedy_competition/{atlas}/"
+            "greedy_competition_trajectory.tsv"
+        ),
+        summary=(
+            "diagnostics/hybrid_greedy_competition/{atlas}/"
+            "greedy_competition_summary.tsv"
+        ),
+        figure=(
+            "diagnostics/hybrid_greedy_competition/{atlas}/"
+            "greedy_competition_gain_ratio.png"
+        ),
+        done="diagnostics/hybrid_greedy_competition/{atlas}/diagnostic.done"
+    log:
+        "logs/diagnostics/hybrid_greedy_competition/{atlas}.log"
+    benchmark:
+        "logs/benchmarking/diagnostics/hybrid_greedy_competition/{atlas}.tsv"
+    wildcard_constraints:
+        atlas="kidney_atac|fetal_atac"
+    threads: 2
+    resources:
+        mem_mb=32000,
+        runtime=2880,
+        slurm_account="cedar"
+    params:
+        max_weight=2.0,
+        comparison_types=4,
+        rank_probe_size=4096,
+        rank_checkpoints=128,
+        gain_chunk_size=1024,
+        random_seed=PEAKVI_RANDOM_SEED
+    shell:
+        r"""
+        set +u
+        eval "$(conda shell.bash hook)"
+        conda activate myenv
+        set -u
+
+        export TMPDIR=${{TMPDIR:-/tmp}}
+        export MPLCONFIGDIR=${{MPLCONFIGDIR:-/tmp/mpl-$USER-$SLURM_JOB_ID}}
+        export OMP_NUM_THREADS={threads}
+        export MKL_NUM_THREADS={threads}
+        export OPENBLAS_NUM_THREADS={threads}
+
+        python {input.script:q} \
+            --feature_matrix {input.features:q} \
+            --cell_names {input.cell_names:q} \
+            --sparsity_npz {input.sparsity:q} \
+            --metadata_tsv {input.metadata:q} \
+            --selected_cells {input.selected:q} \
+            --selected_metrics {input.metrics:q} \
+            --atlas {wildcards.atlas:q} \
+            --output_trajectory {output.trajectory:q} \
+            --output_summary {output.summary:q} \
+            --output_png {output.figure:q} \
+            --output_done {output.done:q} \
+            --max_weight {params.max_weight} \
+            --comparison_types {params.comparison_types} \
+            --rank_probe_size {params.rank_probe_size} \
+            --rank_checkpoints {params.rank_checkpoints} \
+            --gain_chunk_size {params.gain_chunk_size} \
+            --random_seed {params.random_seed} \
+            > {log:q} 2>&1
+        """
+
+
+# Step 4: compute cell-type proportions in atlas vs PeakVI subsets
+# ---------------------------------
+
+rule compute_cell_type_proportions:
+    input:
+        rds="data/processed/{atlas}/{atlas}_barebones_seurat.rds",
+        subsets=lambda wc: expand(
+            (
+                "results/subset_selection/peakvi/{atlas}/"
+                "selected_cells_peakvi_{frac}.txt"
+            ),
+            atlas=wc.atlas,
+            frac=FRACTIONS.keys(),
+        )
+    output:
+        tsv="results/cell_type_proportions/peakvi/{atlas}/cell_type_proportions_peakvi.tsv",
+        tidy_tsv="results/cell_type_proportions/peakvi/{atlas}/cell_type_fractions_tidy.tsv"
+    log:
+        "logs/cell_type_proportions/peakvi/{atlas}.log"
+    benchmark:
+        "logs/benchmarking/cell_type_proportions/peakvi/{atlas}.tsv"
+    threads: 1
+    resources:
+        mem_mb=16000,
+        runtime=120
+    params:
+        subset_dir=lambda wc: f"results/subset_selection/peakvi/{wc.atlas}",
+        fractions=','.join(FRACTIONS.keys()),
+        prefix="selected_cells_peakvi"
+    shell:
+        r"""
+        set +u
+        eval "$(conda shell.bash hook)"
+        conda activate r_env2
+        set -u
+        export TMPDIR=${{TMPDIR:-/tmp}}
+        export MPLCONFIGDIR=${{MPLCONFIGDIR:-/tmp/mpl-$USER-$SLURM_JOB_ID}}
+        Rscript scripts/06_1_compute_cell_type_proportions.R \
+            {input.rds} \
+            {params.subset_dir} \
+            {output.tsv} \
+            {output.tidy_tsv} \
+            {params.fractions} \
+            {params.prefix} \
+            > {log} 2>&1
+        """
+
+
+rule plot_cell_type_alluvial:
+    input:
+        proportions_tsv="results/cell_type_proportions/peakvi/{atlas}/cell_type_proportions_peakvi.tsv"
+    output:
+        png="figures/cell_type_alluvial/peakvi/{atlas}/cell_type_alluvial_peakvi_subsets_to_full.png"
+    log:
+        "logs/cell_type_alluvial/peakvi/{atlas}.log"
+    benchmark:
+        "logs/benchmarking/cell_type_alluvial/peakvi/{atlas}.tsv"
+    threads: 1
+    resources:
+        mem_mb=16000,
+        runtime=120
+    shell:
+        r"""
+        set +u
+        eval "$(conda shell.bash hook)"
+        conda activate r_env2
+        set -u
+        export TMPDIR=${{TMPDIR:-/tmp}}
+        export MPLCONFIGDIR=${{MPLCONFIGDIR:-/tmp/mpl-$USER-$SLURM_JOB_ID}}
+        Rscript scripts/06_2_plot_cell_type_alluvial.R \
+            {input.proportions_tsv} \
+            {wildcards.atlas} \
+            {output.png} \
+            > {log} 2>&1
+        """
+
+
+rule plot_cell_type_heatmap:
+    input:
+        proportions_tsv="results/cell_type_proportions/peakvi/{atlas}/cell_type_proportions_peakvi.tsv"
+    output:
+        png="figures/cell_type_heatmap/peakvi/{atlas}/cell_type_enrichment_heatmap.png"
+    log:
+        "logs/cell_type_heatmap/peakvi/{atlas}.log"
+    benchmark:
+        "logs/benchmarking/cell_type_heatmap/peakvi/{atlas}.tsv"
+    threads: 1
+    resources:
+        mem_mb=16000,
+        runtime=120
+    shell:
+        r"""
+        set +u
+        eval "$(conda shell.bash hook)"
+        conda activate r_env2
+        set -u
+        export TMPDIR=${{TMPDIR:-/tmp}}
+        export MPLCONFIGDIR=${{MPLCONFIGDIR:-/tmp/mpl-$USER-$SLURM_JOB_ID}}
+        Rscript scripts/06_3_plot_cell_type_heatmap.R \
+            {input.proportions_tsv} \
+            {wildcards.atlas} \
+            {output.png} \
+            > {log} 2>&1
+        """
+
+
+rule plot_cell_type_fraction_heatmap:
+    input:
+        tidy_tsv="results/cell_type_proportions/peakvi/{atlas}/cell_type_fractions_tidy.tsv"
+    output:
+        png="figures/cell_type_fraction_heatmap/peakvi/{atlas}/cell_type_fraction_heatmap.png"
+    log:
+        "logs/cell_type_fraction_heatmap/peakvi/{atlas}.log"
+    benchmark:
+        "logs/benchmarking/cell_type_fraction_heatmap/peakvi/{atlas}.tsv"
+    threads: 1
+    resources:
+        mem_mb=16000,
+        runtime=120
+    shell:
+        r"""
+        set +u
+        eval "$(conda shell.bash hook)"
+        conda activate r_env2
+        set -u
+        export TMPDIR=${{TMPDIR:-/tmp}}
+        export MPLCONFIGDIR=${{MPLCONFIGDIR:-/tmp/mpl-$USER-$SLURM_JOB_ID}}
+        Rscript scripts/06_4_plot_cell_type_fraction_heatmap.R \
+            {input.tidy_tsv} \
+            {wildcards.atlas} \
+            {output.png} \
+            > {log} 2>&1
+        """
+
+
+
+# ---------------------------------
+# LEGACY: raw shift-min PeakVI coverage vs subset enrichment
+# This old-method diagnostic is retained for reproducibility but intentionally
+# excluded from rule all after landmark-feature integration.
+# ---------------------------------
+
+rule peakvi_feature_coverage_vs_subset_enrichment:
+    input:
+        rds="data/processed/{atlas}/{atlas}_barebones_seurat.rds",
+        latent_tsv="results/peakvi/{atlas}/{atlas}_peakvi_latent.tsv",
+        proportions_tsv="results/cell_type_proportions/peakvi/{atlas}/cell_type_proportions_peakvi.tsv"
+    output:
+        table="results/peakvi_feature_coverage/{transform}/{atlas}/peakvi_feature_coverage_vs_subset_enrichment.tsv",
+        pearson="figures/peakvi_feature_coverage/{transform}/{atlas}/peakvi_feature_coverage_vs_subset_enrichment_pearson.png",
+        spearman="figures/peakvi_feature_coverage/{transform}/{atlas}/peakvi_feature_coverage_vs_subset_enrichment_spearman.png"
+    log:
+        "logs/peakvi_feature_coverage/{transform}/{atlas}.log"
+    benchmark:
+        "logs/benchmarking/peakvi_feature_coverage/{transform}/{atlas}.tsv"
+    threads: 1
+    resources:
+        mem_mb=32000,
+        runtime=240
+    params:
+        log_transform=lambda wc: COVERAGE_LOG_TRANSFORMS[wc.transform]
+    shell:
+        r"""
+        set +u
+        eval "$(conda shell.bash hook)"
+        conda activate r_env2
+        set -u
+        export TMPDIR=${{TMPDIR:-/tmp}}
+        export MPLCONFIGDIR=${{MPLCONFIGDIR:-/tmp/mpl-$USER-$SLURM_JOB_ID}}
+        Rscript scripts/07_peakvi_feature_coverage_vs_subset_enrichment.R \
+            {input.rds} \
+            {input.latent_tsv} \
+            {input.proportions_tsv} \
+            {wildcards.atlas} \
+            {output.table} \
+            {output.pearson} \
+            {output.spearman} \
+            {params.log_transform} \
+            > {log} 2>&1
+        """
+
+
+# ---------------------------------
+# Step 8.1: PeakVI latent heatmap averaged across all cell types
+# ---------------------------------
+
+rule peakvi_latent_all_cell_types_heatmap:
+    input:
+        rds="data/processed/{atlas}/{atlas}_barebones_seurat.rds",
+        latent_tsv="results/peakvi/{atlas}/{atlas}_peakvi_latent.tsv",
+        proportions_tsv="results/cell_type_proportions/peakvi/{atlas}/cell_type_proportions_peakvi.tsv"
+    output:
+        png="figures/peakvi_latent_heatmap/all_cell_types/{atlas}/peakvi_latent_all_cell_types_heatmap.png",
+        summary="results/peakvi_latent_heatmap/all_cell_types/{atlas}/peakvi_latent_all_cell_types_summary.tsv"
+    log:
+        "logs/peakvi_latent_heatmap/all_cell_types/{atlas}.log"
+    benchmark:
+        "logs/benchmarking/peakvi_latent_heatmap/all_cell_types/{atlas}.tsv"
+    threads: 1
+    resources:
+        mem_mb=32000,
+        runtime=240
+    shell:
+        r"""
+        set +u
+        eval "$(conda shell.bash hook)"
+        conda activate r_env2
+        set -u
+        export TMPDIR=${{TMPDIR:-/tmp}}
+        export MPLCONFIGDIR=${{MPLCONFIGDIR:-/tmp/mpl-$USER-$SLURM_JOB_ID}}
+        Rscript scripts/08_1_factor_loading_all_cell_types_heatmap.R \
+            {input.rds} \
+            {input.latent_tsv} \
+            {input.proportions_tsv} \
+            {wildcards.atlas} \
+            {output.png} \
+            {output.summary} \
+            > {log} 2>&1
+        """
+
+
+# ---------------------------------
+# Step 8.2: PeakVI latent heatmap per cell for least/intermediate/most selected cell types
+# ---------------------------------
+
+rule peakvi_latent_per_cell_three_groups_heatmap:
+    input:
+        rds="data/processed/{atlas}/{atlas}_barebones_seurat.rds",
+        latent_tsv="results/peakvi/{atlas}/{atlas}_peakvi_latent.tsv",
+        proportions_tsv="results/cell_type_proportions/peakvi/{atlas}/cell_type_proportions_peakvi.tsv"
+    output:
+        png="figures/peakvi_latent_heatmap/per_cell_three_groups/{atlas}/peakvi_latent_per_cell_three_groups_heatmap.png",
+        summary="results/peakvi_latent_heatmap/per_cell_three_groups/{atlas}/peakvi_latent_per_cell_three_groups_summary.tsv"
+    log:
+        "logs/peakvi_latent_heatmap/per_cell_three_groups/{atlas}.log"
+    benchmark:
+        "logs/benchmarking/peakvi_latent_heatmap/per_cell_three_groups/{atlas}.tsv"
+    threads: 1
+    resources:
+        mem_mb=32000,
+        runtime=240
+    shell:
+        r"""
+        set +u
+        eval "$(conda shell.bash hook)"
+        conda activate r_env2
+        set -u
+        export TMPDIR=${{TMPDIR:-/tmp}}
+        export MPLCONFIGDIR=${{MPLCONFIGDIR:-/tmp/mpl-$USER-$SLURM_JOB_ID}}
+        Rscript scripts/08_2_factor_loading_per_cell_three_groups_heatmap.R \
+            {input.rds} \
+            {input.latent_tsv} \
+            {input.proportions_tsv} \
+            {wildcards.atlas} \
+            {output.png} \
+            {output.summary} \
+            > {log} 2>&1
+        """
+
+
+# ---------------------------------
+# Step 5: UMAP directly from the PeakVI latent representation
+# ---------------------------------
+
+rule run_peakvi_umap:
+    input:
+        latent_tsv="results/peakvi/{atlas}/{atlas}_peakvi_latent.tsv"
+    output:
+        umap_tsv="results/umap_peakvi/{atlas}/{atlas}_peakvi_umap.tsv",
+        done="results/umap_peakvi/{atlas}/peakvi_umap.done"
+    log:
+        "logs/umap_peakvi/{atlas}.log"
+    benchmark:
+        "logs/benchmarking/umap_peakvi/{atlas}.tsv"
+    threads: 8
+    resources:
+        mem_mb=128000,
+        runtime=1440
+    params:
+        n_neighbors=15,
+        min_dist=0.2,
+        random_seed=PEAKVI_RANDOM_SEED
+    shell:
+        r"""
+        set +u
+        eval "$(conda shell.bash hook)"
+        conda activate scvi
+        set -u
+        export TMPDIR=${{TMPDIR:-/tmp}}
+        export MPLCONFIGDIR=${{MPLCONFIGDIR:-/tmp/mpl-$USER-$SLURM_JOB_ID}}
+        export OMP_NUM_THREADS={threads}
+        export MKL_NUM_THREADS={threads}
+        export OPENBLAS_NUM_THREADS={threads}
+        python scripts/04_run_peakvi_umap.py \
+            --latent_tsv {input.latent_tsv} \
+            --output_umap_tsv {output.umap_tsv} \
+            --output_done {output.done} \
+            --n_neighbors {params.n_neighbors} \
+            --min_dist {params.min_dist} \
+            --random_seed {params.random_seed} \
+            > {log} 2>&1
+        """
+
+
+# ---------------------------------
+# Step 6: subset overlay plots on PeakVI UMAP
+# ---------------------------------
+
+rule plot_subset_umap_overlay_peakvi:
+    input:
+        rds="data/processed/{atlas}/{atlas}_barebones_seurat.rds",
+        umap_tsv="results/umap_peakvi/{atlas}/{atlas}_peakvi_umap.tsv",
+        done="results/umap_peakvi/{atlas}/peakvi_umap.done",
+        subset_cells="results/subset_selection/peakvi/{atlas}/selected_cells_peakvi_{frac}.txt"
+    output:
+        fig="figures/umap_peakvi/subset_overlay/{atlas}/umap_subset_overlay_peakvi_{frac}.png"
+    log:
+        "logs/figures_peakvi_umap/{atlas}_{frac}.log"
+    benchmark:
+        "logs/benchmarking/figures_peakvi_umap/{atlas}_{frac}.tsv"
+    threads: 1
+    resources:
+        mem_mb=32000,
+        runtime=240
+    shell:
+        r"""
+        set +u
+        eval "$(conda shell.bash hook)"
+        conda activate r_env2
+        set -u
+        export TMPDIR=${{TMPDIR:-/tmp}}
+        export MPLCONFIGDIR=${{MPLCONFIGDIR:-/tmp/mpl-$USER-$SLURM_JOB_ID}}
+        Rscript scripts/05_plot_subset_overlay_umap.R \
+            {input.rds} \
+            {input.umap_tsv} \
+            {input.subset_cells} \
+            {wildcards.atlas} \
+            {wildcards.frac} \
+            {output.fig} \
+            cell_type \
+            > {log} 2>&1
+        """
+
+
+rule plot_subset_umap_overlay_peakvi_library_size:
+    input:
+        rds="data/processed/{atlas}/{atlas}_barebones_seurat.rds",
+        umap_tsv="results/umap_peakvi/{atlas}/{atlas}_peakvi_umap.tsv",
+        done="results/umap_peakvi/{atlas}/peakvi_umap.done",
+        subset_cells="results/subset_selection/peakvi/{atlas}/selected_cells_peakvi_{frac}.txt"
+    output:
+        fig="figures/umap_peakvi_library_size/subset_overlay/{atlas}/umap_subset_overlay_peakvi_library_size_{frac}.png"
+    log:
+        "logs/figures_peakvi_umap_library_size/{atlas}_{frac}.log"
+    benchmark:
+        "logs/benchmarking/figures_peakvi_umap_library_size/{atlas}_{frac}.tsv"
+    threads: 1
+    resources:
+        mem_mb=32000,
+        runtime=240
+    shell:
+        r"""
+        set +u
+        eval "$(conda shell.bash hook)"
+        conda activate r_env2
+        set -u
+        export TMPDIR=${{TMPDIR:-/tmp}}
+        export MPLCONFIGDIR=${{MPLCONFIGDIR:-/tmp/mpl-$USER-$SLURM_JOB_ID}}
+        Rscript scripts/05_plot_subset_overlay_umap.R \
+            {input.rds} \
+            {input.umap_tsv} \
+            {input.subset_cells} \
+            {wildcards.atlas} \
+            {wildcards.frac} \
+            {output.fig} \
+            library_size \
+            > {log} 2>&1
+        """
+
+
+# ---------------------------------
+# Step 9.1: Signac DA for every cell type in the full atlas and each subset
+# ---------------------------------
+
+def signac_da_selected_cells(wc):
+    if wc.dataset_size == "100pct":
+        return []
+    return (
+        f"results/subset_selection/peakvi/{wc.atlas}/"
+        f"selected_cells_peakvi_{wc.dataset_size}.txt"
+    )
+
+
+def signac_da_selected_cells_argument(wc):
+    if wc.dataset_size == "100pct":
+        return "FULL"
+    return (
+        f"results/subset_selection/peakvi/{wc.atlas}/"
+        f"selected_cells_peakvi_{wc.dataset_size}.txt"
+    )
+
+
+def signac_da_full_reference(wc):
+    if wc.dataset_size == "100pct":
+        return []
+    return (
+        f"results/signac_da/{wc.atlas}/100pct/"
+        "signac_da_peaks.tsv"
+    )
+
+
+def signac_da_full_reference_argument(wc):
+    if wc.dataset_size == "100pct":
+        return "SELF"
+    return (
+        f"results/signac_da/{wc.atlas}/100pct/"
+        "signac_da_peaks.tsv"
+    )
+
+
+def previous_signac_da_status(wc):
+    """Serialize DA jobs that read the same atlas BPCells directory."""
+    position = SIGNAC_DA_RUN_ORDER.index(wc.dataset_size)
+    if position == 0:
+        return []
+    previous_size = SIGNAC_DA_RUN_ORDER[position - 1]
+    return (
+        f"results/signac_da/{wc.atlas}/{previous_size}/"
+        "signac_da_status.tsv"
+    )
+
+
+rule run_signac_da_all_cell_types:
+    input:
+        script="scripts/09_1_run_signac_da_all_cell_types.R",
+        rds="data/processed/{atlas}/{atlas}_barebones_seurat.rds",
+        selected_cells=signac_da_selected_cells,
+        full_reference=signac_da_full_reference,
+        previous_status=previous_signac_da_status
+    output:
+        peaks=(
+            "results/signac_da/{atlas}/{dataset_size}/"
+            "signac_da_peaks.tsv"
+        ),
+        status=(
+            "results/signac_da/{atlas}/{dataset_size}/"
+            "signac_da_status.tsv"
+        ),
+        reference_effects=(
+            "results/signac_da/{atlas}/{dataset_size}/"
+            "signac_da_reference_effects.tsv"
+        )
+    log:
+        "logs/signac_da/{atlas}/{dataset_size}.log"
+    benchmark:
+        "logs/benchmarking/signac_da/{atlas}/{dataset_size}.tsv"
+    threads: 4
+    resources:
+        mem_mb=lambda wc: 256000 if wc.dataset_size == "100pct" else 128000,
+        runtime=2880,
+        slurm_account="cedar"
+    params:
+        selected_cells=signac_da_selected_cells_argument,
+        full_reference=signac_da_full_reference_argument,
+        min_target_cells=10,
+        min_rest_cells=20,
+        fdr_threshold=0.05,
+        abs_log2fc_threshold=0.25,
+        min_pct=0.01
+    wildcard_constraints:
+        dataset_size="02pct|04pct|06pct|08pct|10pct|100pct"
+    shell:
+        r"""
+        set +u
+        eval "$(conda shell.bash hook)"
+        conda activate r_env2
+        set -u
+
+        export TMPDIR=${{TMPDIR:-/tmp}}
+        export MPLCONFIGDIR=${{MPLCONFIGDIR:-/tmp/mpl-$USER-$SLURM_JOB_ID}}
+        export SIGNAC_DA_TMPDIR="/home/groups/CEDAR/mishrap/scATAC_subset_selection/tmp/signac_da"
+        mkdir -p "$SIGNAC_DA_TMPDIR"
+        export OMP_NUM_THREADS={threads}
+        export MKL_NUM_THREADS={threads}
+        export OPENBLAS_NUM_THREADS={threads}
+
+        Rscript {input.script:q} \
+            {input.rds:q} \
+            {params.selected_cells:q} \
+            {wildcards.atlas:q} \
+            {wildcards.dataset_size:q} \
+            {output.peaks:q} \
+            {output.status:q} \
+            {output.reference_effects:q} \
+            {params.full_reference:q} \
+            {params.min_target_cells} \
+            {params.min_rest_cells} \
+            {params.fdr_threshold} \
+            {params.abs_log2fc_threshold} \
+            {params.min_pct} \
+            > {log:q} 2>&1
+        """
+
+
+# ---------------------------------
+# Step 9.2: quantify same-direction capture of full-atlas Signac DA peaks
+# ---------------------------------
+
+rule compute_signac_da_peak_capture:
+    input:
+        script="scripts/09_2_compute_signac_da_peak_capture.R",
+        full_da=(
+            "results/signac_da/{atlas}/100pct/"
+            "signac_da_peaks.tsv"
+        ),
+        full_status=(
+            "results/signac_da/{atlas}/100pct/"
+            "signac_da_status.tsv"
+        ),
+        subset_da=lambda wc: expand(
+            (
+                "results/signac_da/{atlas}/{dataset_size}/"
+                "signac_da_peaks.tsv"
+            ),
+            atlas=wc.atlas,
+            dataset_size=FRACTIONS.keys(),
+        ),
+        subset_status=lambda wc: expand(
+            (
+                "results/signac_da/{atlas}/{dataset_size}/"
+                "signac_da_status.tsv"
+            ),
+            atlas=wc.atlas,
+            dataset_size=FRACTIONS.keys(),
+        ),
+        subset_reference=lambda wc: expand(
+            (
+                "results/signac_da/{atlas}/{dataset_size}/"
+                "signac_da_reference_effects.tsv"
+            ),
+            atlas=wc.atlas,
+            dataset_size=FRACTIONS.keys(),
+        )
+    output:
+        summary=(
+            "results/signac_da_capture/{atlas}/"
+            "da_peak_capture_summary.tsv"
+        ),
+        details=(
+            "results/signac_da_capture/{atlas}/"
+            "da_peak_overlap_details.tsv"
+        )
+    log:
+        "logs/signac_da_capture/{atlas}.log"
+    benchmark:
+        "logs/benchmarking/signac_da_capture/{atlas}.tsv"
+    threads: 1
+    resources:
+        mem_mb=64000,
+        runtime=240,
+        slurm_account="cedar"
+    shell:
+        r"""
+        set +u
+        eval "$(conda shell.bash hook)"
+        conda activate r_env2
+        set -u
+
+        export TMPDIR=${{TMPDIR:-/tmp}}
+        export MPLCONFIGDIR=${{MPLCONFIGDIR:-/tmp/mpl-$USER-$SLURM_JOB_ID}}
+
+        Rscript {input.script:q} \
+            {wildcards.atlas:q} \
+            {input.full_da:q} \
+            {input.full_status:q} \
+            {output.summary:q} \
+            {output.details:q} \
+            {input.subset_da:q} \
+            {input.subset_status:q} \
+            {input.subset_reference:q} \
+            > {log:q} 2>&1
+        """
+
+
+# ---------------------------------
+# Step 9.3: plot Signac DA effects and same-direction capture
+# ---------------------------------
+
+rule plot_signac_da_capture:
+    input:
+        script="scripts/09_3_plot_signac_da_capture.R",
+        full_da=(
+            "results/signac_da/{atlas}/100pct/"
+            "signac_da_peaks.tsv"
+        ),
+        full_status=(
+            "results/signac_da/{atlas}/100pct/"
+            "signac_da_status.tsv"
+        ),
+        capture_summary=(
+            "results/signac_da_capture/{atlas}/"
+            "da_peak_capture_summary.tsv"
+        ),
+        subset_da=lambda wc: expand(
+            (
+                "results/signac_da/{atlas}/{dataset_size}/"
+                "signac_da_peaks.tsv"
+            ),
+            atlas=wc.atlas,
+            dataset_size=FRACTIONS.keys(),
+        ),
+        subset_status=lambda wc: expand(
+            (
+                "results/signac_da/{atlas}/{dataset_size}/"
+                "signac_da_status.tsv"
+            ),
+            atlas=wc.atlas,
+            dataset_size=FRACTIONS.keys(),
+        )
+    output:
+        heatmap="figures/signac_da/{atlas}/da_capture_heatmap.png",
+        trajectories="figures/signac_da/{atlas}/da_capture_trajectories.png",
+        bubble="figures/signac_da/{atlas}/da_capture_bubble_heatmap.png",
+        manifest=(
+            "results/signac_da_capture/{atlas}/"
+            "effect_histogram_manifest.tsv"
+        )
+    log:
+        "logs/signac_da_capture/{atlas}_plots.log"
+    benchmark:
+        "logs/benchmarking/signac_da_capture/{atlas}_plots.tsv"
+    threads: 1
+    resources:
+        mem_mb=32000,
+        runtime=240,
+        slurm_account="cedar"
+    params:
+        histogram_dir=lambda wc: (
+            f"figures/signac_da/{wc.atlas}/effect_histograms"
+        )
+    shell:
+        r"""
+        set +u
+        eval "$(conda shell.bash hook)"
+        conda activate r_env2
+        set -u
+
+        export TMPDIR=${{TMPDIR:-/tmp}}
+        export MPLCONFIGDIR=${{MPLCONFIGDIR:-/tmp/mpl-$USER-$SLURM_JOB_ID}}
+
+        Rscript {input.script:q} \
+            {wildcards.atlas:q} \
+            {input.full_da:q} \
+            {input.full_status:q} \
+            {input.capture_summary:q} \
+            {params.histogram_dir:q} \
+            {output.heatmap:q} \
+            {output.trajectories:q} \
+            {output.bubble:q} \
+            {output.manifest:q} \
+            {input.subset_da:q} \
+            {input.subset_status:q} \
+            > {log:q} 2>&1
+        """
+
+
+# ---------------------------------
+
+# ---------------------------------
+# Publication panels across all three atlases and subset sizes
+# ---------------------------------
+
+rule plot_publication_peakvi_umap_panel:
+    input:
+        script="scripts/10_1_plot_publication_umap_panel.py",
+        umap_tsvs=expand(
+            "results/umap_peakvi/{atlas}/{atlas}_peakvi_umap.tsv",
+            atlas=ATLASES,
+        ),
+        metadata_tsvs=expand(
+            "results/cell_metadata/{atlas}/{atlas}_cell_metadata.tsv",
+            atlas=ATLASES,
+        ),
+        selected_cells=expand(
+            (
+                "results/subset_selection/peakvi/{atlas}/"
+                "selected_cells_peakvi_{frac}.txt"
+            ),
+            atlas=ATLASES,
+            frac=FRACTIONS.keys(),
+        )
+    output:
+        png="figures/publication/peakvi_subset_overlay_3x5.png",
+        pdf="figures/publication/peakvi_subset_overlay_3x5.pdf",
+        summary=(
+            "results/publication_panels/"
+            "peakvi_subset_overlay_3x5_summary.tsv"
+        )
+    log:
+        "logs/publication/peakvi_subset_overlay_3x5.log"
+    benchmark:
+        "logs/benchmarking/publication/peakvi_subset_overlay_3x5.tsv"
+    threads: 1
+    resources:
+        mem_mb=16000,
+        runtime=120,
+        slurm_account="cedar"
+    params:
+        atlases=" ".join(ATLASES),
+        fractions=" ".join(FRACTIONS.keys()),
+        random_seed=PEAKVI_RANDOM_SEED
+    shell:
+        r"""
+        set +u
+        eval "$(conda shell.bash hook)"
+        conda activate scvi
+        set -u
+
+        export TMPDIR=${{TMPDIR:-/tmp}}
+        export MPLCONFIGDIR=${{MPLCONFIGDIR:-/tmp/mpl-$USER-$SLURM_JOB_ID}}
+        export OMP_NUM_THREADS=1
+        export MKL_NUM_THREADS=1
+        export OPENBLAS_NUM_THREADS=1
+
+        python {input.script:q}             --atlases {params.atlases}             --fractions {params.fractions}             --umap_tsvs {input.umap_tsvs:q}             --metadata_tsvs {input.metadata_tsvs:q}             --selected_cells {input.selected_cells:q}             --output_png {output.png:q}             --output_pdf {output.pdf:q}             --output_summary_tsv {output.summary:q}             --random_seed {params.random_seed}             > {log:q} 2>&1
+        """
+
+
+rule plot_publication_signac_da_panel:
+    input:
+        script="scripts/10_2_plot_publication_signac_da_panel.py",
+        details=expand(
+            (
+                "results/signac_da_capture/{atlas}/"
+                "da_peak_overlap_details.tsv"
+            ),
+            atlas=ATLASES,
+        )
+    output:
+        png="figures/publication/signac_da_recapitulation_3x5.png",
+        pdf="figures/publication/signac_da_recapitulation_3x5.pdf",
+        summary=(
+            "results/publication_panels/"
+            "signac_da_recapitulation_3x5_summary.tsv"
+        )
+    log:
+        "logs/publication/signac_da_recapitulation_3x5.log"
+    benchmark:
+        "logs/benchmarking/publication/signac_da_recapitulation_3x5.tsv"
+    threads: 1
+    resources:
+        mem_mb=128000,
+        runtime=120,
+        slurm_account="cedar"
+    params:
+        atlases=" ".join(ATLASES),
+        fractions=" ".join(FRACTIONS.keys())
+    shell:
+        r"""
+        set +u
+        eval "$(conda shell.bash hook)"
+        conda activate scvi
+        set -u
+
+        export TMPDIR=${{TMPDIR:-/tmp}}
+        export MPLCONFIGDIR=${{MPLCONFIGDIR:-/tmp/mpl-$USER-$SLURM_JOB_ID}}
+        export OMP_NUM_THREADS=1
+        export MKL_NUM_THREADS=1
+        export OPENBLAS_NUM_THREADS=1
+
+        python {input.script:q}             --atlases {params.atlases}             --fractions {params.fractions}             --details_tsvs {input.details:q}             --output_png {output.png:q}             --output_pdf {output.pdf:q}             --output_summary_tsv {output.summary:q}             > {log:q} 2>&1
+        """
+
+
+# Temporary diagnostic: landmark positions and cell-type coverage
+# ---------------------------------
+
+rule diagnose_landmark_celltype_coverage:
+    input:
+        script="diagnostics/diagnose_landmark_celltype_coverage.py",
+        feature_matrix=(
+            "results/peakvi_landmark_features/{atlas}/"
+            "peakvi_rbf_landmark_features.npy"
+        ),
+        centroids=(
+            "results/peakvi_landmark_features/{atlas}/"
+            "peakvi_landmark_centroids.npy"
+        ),
+        landmark_metadata=(
+            "results/peakvi_landmark_features/{atlas}/"
+            "peakvi_landmark_metadata.json"
+        ),
+        cell_names="results/peakvi/{atlas}/cell_names.txt",
+        cell_metadata=(
+            "results/cell_metadata/{atlas}/{atlas}_cell_metadata.tsv"
+        ),
+        umap_tsv="results/umap_peakvi/{atlas}/{atlas}_peakvi_umap.tsv"
+    output:
+        umap=(
+            "diagnostics/landmark_celltype_coverage/{atlas}/"
+            "landmark_coverage_umap.png"
+        ),
+        cell_types=(
+            "diagnostics/landmark_celltype_coverage/{atlas}/"
+            "cell_type_landmark_counts.tsv"
+        ),
+        landmarks=(
+            "diagnostics/landmark_celltype_coverage/{atlas}/"
+            "landmark_assignments.tsv"
+        )
+    log:
+        "logs/diagnostics/landmark_celltype_coverage/{atlas}.log"
+    benchmark:
+        "logs/benchmarking/diagnostics/landmark_celltype_coverage/{atlas}.tsv"
+    threads: 1
+    resources:
+        mem_mb=16000,
+        runtime=240,
+        slurm_account="cedar"
+    shell:
+        r"""
+        set +u
+        eval "$(conda shell.bash hook)"
+        conda activate scvi
+        set -u
+
+        export TMPDIR=${{TMPDIR:-/tmp}}
+        export MPLCONFIGDIR=${{MPLCONFIGDIR:-/tmp/mpl-$USER-$SLURM_JOB_ID}}
+        export OMP_NUM_THREADS={threads}
+        export MKL_NUM_THREADS={threads}
+        export OPENBLAS_NUM_THREADS={threads}
+
+        python {input.script:q} \
+            --atlas {wildcards.atlas:q} \
+            --feature_matrix {input.feature_matrix:q} \
+            --centroids {input.centroids:q} \
+            --landmark_metadata {input.landmark_metadata:q} \
+            --cell_names {input.cell_names:q} \
+            --cell_metadata {input.cell_metadata:q} \
+            --umap_tsv {input.umap_tsv:q} \
+            --output_umap_png {output.umap:q} \
+            --output_cell_type_tsv {output.cell_types:q} \
+            --output_landmark_tsv {output.landmarks:q} \
+            --cell_type_column cell_type \
+            --chunk_size 25000 \
+            --max_background_cells 500000 \
+            --random_seed {PEAKVI_LANDMARK_RANDOM_SEED} \
+            --dpi 320 \
+            > {log:q} 2>&1
+        """
+
+
+# ---------------------------------
+# Temporary diagnostic: latent profiles versus subset retention
+# ---------------------------------
+
+rule diagnose_latent_profiles_by_selection:
+    input:
+        script="diagnostics/diagnose_latent_profiles_by_selection.py",
+        latent_npy="results/peakvi/{atlas}/peakvi_latent.npy",
+        cell_names="results/peakvi/{atlas}/cell_names.txt",
+        cell_metadata=(
+            "results/cell_metadata/{atlas}/{atlas}_cell_metadata.tsv"
+        ),
+        proportions=(
+            "results/cell_type_proportions/peakvi/{atlas}/"
+            "cell_type_proportions_peakvi.tsv"
+        )
+    output:
+        png=(
+            "diagnostics/latent_profiles_by_selection/{atlas}/"
+            "latent_profiles_by_selection.png"
+        ),
+        summary=(
+            "diagnostics/latent_profiles_by_selection/{atlas}/"
+            "latent_profiles_by_selection_summary.tsv"
+        )
+    log:
+        "logs/diagnostics/latent_profiles_by_selection/{atlas}.log"
+    benchmark:
+        "logs/benchmarking/diagnostics/latent_profiles_by_selection/{atlas}.tsv"
+    threads: 1
+    resources:
+        mem_mb=12000,
+        runtime=240,
+        slurm_account="cedar"
+    shell:
+        r"""
+        set +u
+        eval "$(conda shell.bash hook)"
+        conda activate scvi
+        set -u
+
+        export TMPDIR=${{TMPDIR:-/tmp}}
+        export MPLCONFIGDIR=${{MPLCONFIGDIR:-/tmp/mpl-$USER-$SLURM_JOB_ID}}
+        export OMP_NUM_THREADS={threads}
+        export MKL_NUM_THREADS={threads}
+        export OPENBLAS_NUM_THREADS={threads}
+
+        python {input.script:q} \
+            --atlas {wildcards.atlas:q} \
+            --latent_npy {input.latent_npy:q} \
+            --cell_names {input.cell_names:q} \
+            --cell_metadata {input.cell_metadata:q} \
+            --proportions_tsv {input.proportions:q} \
+            --output_png {output.png:q} \
+            --output_summary_tsv {output.summary:q} \
+            --cell_type_column cell_type \
+            --chunk_size 100000 \
+            --z_clip 3 \
+            --dpi 320 \
+            > {log:q} 2>&1
+        """
+
+
+# ---------------------------------
+# Temporary diagnostic: minimum stable landmarks by cell type
+# ---------------------------------
+
+rule diagnose_minimum_landmarks:
+    input:
+        script="diagnostics/diagnose_minimum_landmarks.py",
+        latent_npy="results/peakvi/{atlas}/peakvi_latent.npy",
+        cell_names="results/peakvi/{atlas}/cell_names.txt",
+        cell_metadata=(
+            "results/cell_metadata/{atlas}/{atlas}_cell_metadata.tsv"
+        )
+    output:
+        run_details=(
+            "diagnostics/minimum_landmarks/{atlas}/"
+            "landmark_capture_run_details.tsv"
+        ),
+        cell_types=(
+            "diagnostics/minimum_landmarks/{atlas}/"
+            "cell_type_minimum_landmarks.tsv"
+        ),
+        atlas=(
+            "diagnostics/minimum_landmarks/{atlas}/"
+            "atlas_minimum_landmarks.tsv"
+        ),
+        heatmap=(
+            "diagnostics/minimum_landmarks/{atlas}/figures/"
+            "landmark_capture_rate_heatmap.png"
+        ),
+        curve=(
+            "diagnostics/minimum_landmarks/{atlas}/figures/"
+            "landmark_capture_curve.png"
+        )
+    log:
+        "logs/diagnostics/minimum_landmarks/{atlas}.log"
+    benchmark:
+        "logs/benchmarking/diagnostics/minimum_landmarks/{atlas}.tsv"
+    threads: 2
+    resources:
+        mem_mb=32000,
+        runtime=2880,
+        slurm_account="cedar"
+    shell:
+        r"""
+        set +u
+        eval "$(conda shell.bash hook)"
+        conda activate scvi
+        set -u
+
+        export TMPDIR=${{TMPDIR:-/tmp}}
+        export MPLCONFIGDIR=${{MPLCONFIGDIR:-/tmp/mpl-$USER-$SLURM_JOB_ID}}
+        export OMP_NUM_THREADS={threads}
+        export MKL_NUM_THREADS={threads}
+        export OPENBLAS_NUM_THREADS={threads}
+
+        python {input.script:q} \
+            --atlas {wildcards.atlas:q} \
+            --latent_npy {input.latent_npy:q} \
+            --cell_names {input.cell_names:q} \
+            --cell_metadata {input.cell_metadata:q} \
+            --output_run_details_tsv {output.run_details:q} \
+            --output_cell_type_tsv {output.cell_types:q} \
+            --output_atlas_tsv {output.atlas:q} \
+            --output_heatmap_png {output.heatmap:q} \
+            --output_curve_png {output.curve:q} \
+            --cell_type_column cell_type \
+            --landmark_counts {MINIMUM_LANDMARK_DIAGNOSTIC_COUNTS:q} \
+            --random_seeds {MINIMUM_LANDMARK_DIAGNOSTIC_SEEDS:q} \
+            --required_seed_fraction 1.0 \
+            --min_type_cells_enriched 5 \
+            --min_cluster_enrichment 5.0 \
+            --kmeans_batch_size {PEAKVI_LANDMARK_KMEANS_BATCH_SIZE} \
+            --kmeans_max_iter {PEAKVI_LANDMARK_KMEANS_MAX_ITER} \
+            --kmeans_n_init {PEAKVI_LANDMARK_KMEANS_N_INIT} \
+            --kmeans_max_no_improvement {PEAKVI_LANDMARK_KMEANS_MAX_NO_IMPROVEMENT} \
+            --kmeans_reassignment_ratio {PEAKVI_LANDMARK_KMEANS_REASSIGNMENT_RATIO} \
+            --distance_chunk_size 100000 \
+            --dpi 320 \
+            > {log:q} 2>&1
+        """
+
+
+# ---------------------------------
+# Temporary diagnostic: own-landmark distances versus subset enrichment
+# ---------------------------------
+
+rule diagnose_centroid_distance_by_selection:
+    input:
+        script="diagnostics/diagnose_centroid_distance_by_selection.py",
+        latent_npy="results/peakvi/{atlas}/peakvi_latent.npy",
+        centroids=(
+            "results/peakvi_landmark_features/{atlas}/"
+            "peakvi_landmark_centroids.npy"
+        ),
+        landmark_metadata=(
+            "results/peakvi_landmark_features/{atlas}/"
+            "peakvi_landmark_metadata.json"
+        ),
+        landmark_assignments=(
+            "diagnostics/landmark_celltype_coverage/{atlas}/"
+            "landmark_assignments.tsv"
+        ),
+        cell_names="results/peakvi/{atlas}/cell_names.txt",
+        cell_metadata=(
+            "results/cell_metadata/{atlas}/{atlas}_cell_metadata.tsv"
+        ),
+        proportions=(
+            "results/cell_type_proportions/peakvi/{atlas}/"
+            "cell_type_proportions_peakvi.tsv"
+        )
+    output:
+        cell_types=(
+            "diagnostics/centroid_distance_by_selection/{atlas}/"
+            "cell_type_distance_summary.tsv"
+        ),
+        centroids=(
+            "diagnostics/centroid_distance_by_selection/{atlas}/"
+            "centroid_distance_summary.tsv"
+        ),
+        statistics=(
+            "diagnostics/centroid_distance_by_selection/{atlas}/"
+            "distance_enrichment_statistics.tsv"
+        ),
+        overview=(
+            "diagnostics/centroid_distance_by_selection/{atlas}/"
+            "distance_vs_selection_overview.png"
+        ),
+        violin_dir=directory(
+            "diagnostics/centroid_distance_by_selection/{atlas}/"
+            "violin_panels"
+        ),
+        manifest=(
+            "diagnostics/centroid_distance_by_selection/{atlas}/"
+            "violin_panel_manifest.tsv"
+        )
+    log:
+        "logs/diagnostics/centroid_distance_by_selection/{atlas}.log"
+    benchmark:
+        "logs/benchmarking/diagnostics/centroid_distance_by_selection/{atlas}.tsv"
+    threads: 1
+    resources:
+        mem_mb=12000,
+        runtime=480,
+        slurm_account="cedar"
+    shell:
+        r"""
+        set +u
+        eval "$(conda shell.bash hook)"
+        conda activate scvi
+        set -u
+
+        export TMPDIR=${{TMPDIR:-/tmp}}
+        export MPLCONFIGDIR=${{MPLCONFIGDIR:-/tmp/mpl-$USER-$SLURM_JOB_ID}}
+        export OMP_NUM_THREADS={threads}
+        export MKL_NUM_THREADS={threads}
+        export OPENBLAS_NUM_THREADS={threads}
+
+        python {input.script:q} \
+            --atlas {wildcards.atlas:q} \
+            --latent_npy {input.latent_npy:q} \
+            --centroids {input.centroids:q} \
+            --landmark_metadata {input.landmark_metadata:q} \
+            --landmark_assignments {input.landmark_assignments:q} \
+            --cell_names {input.cell_names:q} \
+            --cell_metadata {input.cell_metadata:q} \
+            --proportions_tsv {input.proportions:q} \
+            --output_cell_type_tsv {output.cell_types:q} \
+            --output_centroid_tsv {output.centroids:q} \
+            --output_statistics_tsv {output.statistics:q} \
+            --output_summary_png {output.overview:q} \
+            --output_violin_dir {output.violin_dir:q} \
+            --output_manifest_tsv {output.manifest:q} \
+            --cell_type_column cell_type \
+            --max_cells_per_type 20000 \
+            --distance_chunk_size 5000 \
+            --n_permutations 10000 \
+            --n_bootstrap 5000 \
+            --random_seed {PEAKVI_LANDMARK_RANDOM_SEED} \
+            --dpi 320 \
+            > {log:q} 2>&1
+        """
+
+
+# ---------------------------------
+# Temporary diagnostic: RBF activation and Apricot marginal-gain competition
+# ---------------------------------
+
+rule diagnose_rbf_activation_and_marginal_gain:
+    input:
+        script="diagnostics/diagnose_rbf_activation_and_marginal_gain.py",
+        feature_matrix=(
+            "results/peakvi_landmark_features/{atlas}/"
+            "peakvi_rbf_landmark_features.npy"
+        ),
+        landmark_metadata=(
+            "results/peakvi_landmark_features/{atlas}/"
+            "peakvi_landmark_metadata.json"
+        ),
+        cell_names="results/peakvi/{atlas}/cell_names.txt",
+        cell_metadata=(
+            "results/cell_metadata/{atlas}/{atlas}_cell_metadata.tsv"
+        ),
+        landmark_counts=(
+            "diagnostics/landmark_celltype_coverage/{atlas}/"
+            "cell_type_landmark_counts.tsv"
+        ),
+        selected=lambda wc: expand(
+            (
+                "results/subset_selection/peakvi/{atlas}/"
+                "selected_cells_peakvi_{frac}.txt"
+            ),
+            atlas=wc.atlas,
+            frac=LEGACY_DIAGNOSTIC_FRACTIONS.keys(),
+        )
+    output:
+        cell_types=(
+            "diagnostics/rbf_activation_marginal_gain/{atlas}/"
+            "cell_type_activation_marginal_gain.tsv"
+        ),
+        matches=(
+            "diagnostics/rbf_activation_marginal_gain/{atlas}/"
+            "abundance_matched_retained_controls.tsv"
+        ),
+        associations=(
+            "diagnostics/rbf_activation_marginal_gain/{atlas}/"
+            "metric_enrichment_associations.tsv"
+        ),
+        per_cell=(
+            "diagnostics/rbf_activation_marginal_gain/{atlas}/"
+            "per_cell_activation_marginal_gain.npz"
+        ),
+        summary=(
+            "diagnostics/rbf_activation_marginal_gain/{atlas}/"
+            "diagnostic_summary.json"
+        ),
+        activation=(
+            "diagnostics/rbf_activation_marginal_gain/{atlas}/figures/"
+            "rbf_activation_vs_enrichment.png"
+        ),
+        residual=(
+            "diagnostics/rbf_activation_marginal_gain/{atlas}/figures/"
+            "residual_gain_percentile_heatmap.png"
+        ),
+        matched=(
+            "diagnostics/rbf_activation_marginal_gain/{atlas}/figures/"
+            "missed_vs_abundance_matched_controls.png"
+        )
+    log:
+        "logs/diagnostics/rbf_activation_marginal_gain/{atlas}.log"
+    benchmark:
+        "logs/benchmarking/diagnostics/rbf_activation_marginal_gain/{atlas}.tsv"
+    threads: 1
+    resources:
+        mem_mb=16000,
+        runtime=720,
+        slurm_account="cedar"
+    params:
+        figures_dir=lambda wc: (
+            f"diagnostics/rbf_activation_marginal_gain/{wc.atlas}/figures"
+        )
+    shell:
+        r"""
+        set +u
+        eval "$(conda shell.bash hook)"
+        conda activate scvi
+        set -u
+
+        export TMPDIR=${{TMPDIR:-/tmp}}
+        export MPLCONFIGDIR=${{MPLCONFIGDIR:-/tmp/mpl-$USER-$SLURM_JOB_ID}}
+        export OMP_NUM_THREADS={threads}
+        export MKL_NUM_THREADS={threads}
+        export OPENBLAS_NUM_THREADS={threads}
+
+        python {input.script:q} \
+            --atlas {wildcards.atlas:q} \
+            --feature_matrix {input.feature_matrix:q} \
+            --landmark_metadata {input.landmark_metadata:q} \
+            --cell_names {input.cell_names:q} \
+            --cell_metadata {input.cell_metadata:q} \
+            --landmark_counts {input.landmark_counts:q} \
+            --selected_cells {input.selected:q} \
+            --output_cell_type_tsv {output.cell_types:q} \
+            --output_matches_tsv {output.matches:q} \
+            --output_associations_tsv {output.associations:q} \
+            --output_per_cell_npz {output.per_cell:q} \
+            --output_summary_json {output.summary:q} \
+            --output_figures_dir {params.figures_dir:q} \
+            --cell_type_column cell_type \
+            --chunk_size 10000 \
+            --n_controls 3 \
+            --random_seed {PEAKVI_LANDMARK_RANDOM_SEED} \
+            --dpi 320 \
+            > {log:q} 2>&1
+        """
+
+
+# ---------------------------------
+# Temporary diagnostic: 2% RBF row-normalization ablation
+# Selection is annotation-blind; labels are used only by the summary rule.
+# ---------------------------------
+
+rule run_rbf_normalization_ablation:
+    input:
+        script="diagnostics/run_rbf_normalization_ablation.py",
+        features=(
+            "results/peakvi_landmark_features/{atlas}/"
+            "peakvi_rbf_landmark_features.npy"
+        ),
+        metadata=(
+            "results/peakvi_landmark_features/{atlas}/"
+            "peakvi_landmark_metadata.json"
+        ),
+        cell_names="results/peakvi/{atlas}/cell_names.txt",
+        baseline=(
+            "results/subset_selection/peakvi/{atlas}/"
+            "selected_cells_peakvi_02pct.txt"
+        )
+    output:
+        selected=(
+            "diagnostics/rbf_normalization_ablation/{atlas}/{method}/"
+            "selected_cells_02pct.txt"
+        ),
+        summary=(
+            "diagnostics/rbf_normalization_ablation/{atlas}/{method}/"
+            "run_summary.tsv"
+        )
+    log:
+        "logs/diagnostics/rbf_normalization_ablation/{atlas}_{method}.log"
+    benchmark:
+        "logs/benchmarking/diagnostics/rbf_normalization_ablation/"
+        "{atlas}_{method}.tsv"
+    threads: 2
+    resources:
+        mem_mb=32000,
+        runtime=2880,
+        slurm_account="cedar"
+    wildcard_constraints:
+        method="l1|singleton_capped"
+    shell:
+        r"""
+        set +u
+        eval "$(conda shell.bash hook)"
+        conda activate myenv
+        set -u
+
+        export TMPDIR=${{TMPDIR:-/tmp}}
+        export OMP_NUM_THREADS={threads}
+        export MKL_NUM_THREADS={threads}
+        export OPENBLAS_NUM_THREADS={threads}
+
+        python {input.script:q} \
+            --atlas {wildcards.atlas:q} \
+            --method {wildcards.method:q} \
+            --feature_matrix {input.features:q} \
+            --cell_names {input.cell_names:q} \
+            --landmark_metadata {input.metadata:q} \
+            --baseline_selected_cells {input.baseline:q} \
+            --output_selected_cells {output.selected:q} \
+            --output_summary_tsv {output.summary:q} \
+            --fraction 0.02 \
+            --min_gain_ratio 0.5 \
+            --max_gain_ratio 2.0 \
+            --chunk_size 25000 \
+            --random_seed {PEAKVI_LANDMARK_RANDOM_SEED} \
+            > {log:q} 2>&1
+        """
+
+
+rule summarize_rbf_normalization_ablation:
+    input:
+        script="diagnostics/summarize_rbf_normalization_ablation.py",
+        features=(
+            "results/peakvi_landmark_features/{atlas}/"
+            "peakvi_rbf_landmark_features.npy"
+        ),
+        cell_names="results/peakvi/{atlas}/cell_names.txt",
+        cell_metadata=(
+            "results/cell_metadata/{atlas}/{atlas}_cell_metadata.tsv"
+        ),
+        umap="results/umap_peakvi/{atlas}/{atlas}_peakvi_umap.tsv",
+        baseline=(
+            "results/subset_selection/peakvi/{atlas}/"
+            "selected_cells_peakvi_02pct.txt"
+        ),
+        l1_selected=(
+            "diagnostics/rbf_normalization_ablation/{atlas}/l1/"
+            "selected_cells_02pct.txt"
+        ),
+        singleton_selected=(
+            "diagnostics/rbf_normalization_ablation/{atlas}/singleton_capped/"
+            "selected_cells_02pct.txt"
+        ),
+        l1_summary=(
+            "diagnostics/rbf_normalization_ablation/{atlas}/l1/"
+            "run_summary.tsv"
+        ),
+        singleton_summary=(
+            "diagnostics/rbf_normalization_ablation/{atlas}/singleton_capped/"
+            "run_summary.tsv"
+        )
+    output:
+        methods=(
+            "diagnostics/rbf_normalization_ablation/{atlas}/comparison/"
+            "method_summary.tsv"
+        ),
+        cell_types=(
+            "diagnostics/rbf_normalization_ablation/{atlas}/comparison/"
+            "cell_type_details.tsv"
+        ),
+        changes=(
+            "diagnostics/rbf_normalization_ablation/{atlas}/comparison/"
+            "retention_changes.tsv"
+        ),
+        overview=(
+            "diagnostics/rbf_normalization_ablation/{atlas}/comparison/figures/"
+            "normalization_ablation_overview.png"
+        ),
+        composition=(
+            "diagnostics/rbf_normalization_ablation/{atlas}/comparison/figures/"
+            "composition_fidelity.png"
+        )
+    log:
+        "logs/diagnostics/rbf_normalization_ablation/{atlas}_summary.log"
+    benchmark:
+        "logs/benchmarking/diagnostics/rbf_normalization_ablation/"
+        "{atlas}_summary.tsv"
+    threads: 2
+    resources:
+        mem_mb=16000,
+        runtime=240,
+        slurm_account="cedar"
+    shell:
+        r"""
+        set +u
+        eval "$(conda shell.bash hook)"
+        conda activate scvi
+        set -u
+
+        export TMPDIR=${{TMPDIR:-/tmp}}
+        export MPLCONFIGDIR=${{MPLCONFIGDIR:-/tmp/mpl-$USER-$SLURM_JOB_ID}}
+        export OMP_NUM_THREADS={threads}
+        export MKL_NUM_THREADS={threads}
+        export OPENBLAS_NUM_THREADS={threads}
+
+        python {input.script:q} \
+            --atlas {wildcards.atlas:q} \
+            --feature_matrix {input.features:q} \
+            --cell_names {input.cell_names:q} \
+            --cell_metadata {input.cell_metadata:q} \
+            --umap_tsv {input.umap:q} \
+            --baseline_selected {input.baseline:q} \
+            --l1_selected {input.l1_selected:q} \
+            --singleton_selected {input.singleton_selected:q} \
+            --l1_run_summary {input.l1_summary:q} \
+            --singleton_run_summary {input.singleton_summary:q} \
+            --output_method_summary {output.methods:q} \
+            --output_cell_type_details {output.cell_types:q} \
+            --output_retention_changes {output.changes:q} \
+            --output_overview_png {output.overview:q} \
+            --output_composition_png {output.composition:q} \
+            --cell_type_column cell_type \
+            --rare_threshold 0.01 \
+            --chunk_size 50000 \
+            --dpi 320 \
+            > {log:q} 2>&1
+        """
+
+
+# ---------------------------------
+# Temporary diagnostic: generalize L1-normalized RBF selection to 4-10%.
+# The completed 2% L1 selections are reused by the summary rule.
+# ---------------------------------
+
+rule run_l1_normalization_generalization:
+    input:
+        script="diagnostics/run_rbf_normalization_ablation.py",
+        features=(
+            "results/peakvi_landmark_features/{atlas}/"
+            "peakvi_rbf_landmark_features.npy"
+        ),
+        metadata=(
+            "results/peakvi_landmark_features/{atlas}/"
+            "peakvi_landmark_metadata.json"
+        ),
+        cell_names="results/peakvi/{atlas}/cell_names.txt",
+        baseline=(
+            "results/subset_selection/peakvi/{atlas}/"
+            "selected_cells_peakvi_{frac}.txt"
+        )
+    output:
+        selected=(
+            "diagnostics/rbf_normalization_ablation/{atlas}/l1/"
+            "selected_cells_{frac}.txt"
+        ),
+        summary=(
+            "diagnostics/rbf_normalization_ablation/{atlas}/l1/"
+            "run_summary_{frac}.tsv"
+        )
+    log:
+        "logs/diagnostics/rbf_normalization_generalization/{atlas}_{frac}.log"
+    benchmark:
+        "logs/benchmarking/diagnostics/rbf_normalization_generalization/"
+        "{atlas}_{frac}.tsv"
+    threads: 2
+    resources:
+        mem_mb=32000,
+        runtime=2880,
+        slurm_account="cedar"
+    params:
+        fraction=lambda wc: LEGACY_DIAGNOSTIC_FRACTIONS[wc.frac]
+    wildcard_constraints:
+        frac="04pct|06pct|08pct|10pct"
+    shell:
+        r"""
+        set +u
+        eval "$(conda shell.bash hook)"
+        conda activate myenv
+        set -u
+
+        export TMPDIR=${{TMPDIR:-/tmp}}
+        export OMP_NUM_THREADS={threads}
+        export MKL_NUM_THREADS={threads}
+        export OPENBLAS_NUM_THREADS={threads}
+
+        python {input.script:q} \
+            --atlas {wildcards.atlas:q} \
+            --method l1 \
+            --feature_matrix {input.features:q} \
+            --cell_names {input.cell_names:q} \
+            --landmark_metadata {input.metadata:q} \
+            --baseline_selected_cells {input.baseline:q} \
+            --output_selected_cells {output.selected:q} \
+            --output_summary_tsv {output.summary:q} \
+            --fraction {params.fraction} \
+            --chunk_size 25000 \
+            --random_seed {PEAKVI_LANDMARK_RANDOM_SEED} \
+            > {log:q} 2>&1
+        """
+
+
+rule summarize_l1_normalization_generalization:
+    input:
+        script="diagnostics/summarize_l1_normalization_generalization.py",
+        cell_names="results/peakvi/{atlas}/cell_names.txt",
+        cell_metadata=(
+            "results/cell_metadata/{atlas}/{atlas}_cell_metadata.tsv"
+        ),
+        umap="results/umap_peakvi/{atlas}/{atlas}_peakvi_umap.tsv",
+        baseline=lambda wc: expand(
+            (
+                "results/subset_selection/peakvi/{atlas}/"
+                "selected_cells_peakvi_{frac}.txt"
+            ),
+            atlas=wc.atlas,
+            frac=LEGACY_DIAGNOSTIC_FRACTIONS.keys(),
+        ),
+        l1=lambda wc: [
+            (
+                "diagnostics/rbf_normalization_ablation/"
+                f"{wc.atlas}/l1/selected_cells_02pct.txt"
+            ),
+            *expand(
+                (
+                    "diagnostics/rbf_normalization_ablation/{atlas}/l1/"
+                    "selected_cells_{frac}.txt"
+                ),
+                atlas=wc.atlas,
+                frac=["04pct", "06pct", "08pct", "10pct"],
+            ),
+        ],
+        l1_summaries=lambda wc: [
+            (
+                "diagnostics/rbf_normalization_ablation/"
+                f"{wc.atlas}/l1/run_summary.tsv"
+            ),
+            *expand(
+                (
+                    "diagnostics/rbf_normalization_ablation/{atlas}/l1/"
+                    "run_summary_{frac}.tsv"
+                ),
+                atlas=wc.atlas,
+                frac=["04pct", "06pct", "08pct", "10pct"],
+            ),
+        ]
+    output:
+        methods=(
+            "diagnostics/rbf_normalization_generalization/{atlas}/"
+            "fraction_method_summary.tsv"
+        ),
+        cell_types=(
+            "diagnostics/rbf_normalization_generalization/{atlas}/"
+            "cell_type_fraction_details.tsv"
+        ),
+        changes=(
+            "diagnostics/rbf_normalization_generalization/{atlas}/"
+            "retention_changes.tsv"
+        ),
+        retention=(
+            "diagnostics/rbf_normalization_generalization/{atlas}/figures/"
+            "retention_across_fractions.png"
+        ),
+        composition=(
+            "diagnostics/rbf_normalization_generalization/{atlas}/figures/"
+            "composition_across_fractions.png"
+        ),
+        coverage=(
+            "diagnostics/rbf_normalization_generalization/{atlas}/figures/"
+            "umap_coverage_across_fractions.png"
+        )
+    log:
+        "logs/diagnostics/rbf_normalization_generalization/{atlas}_summary.log"
+    benchmark:
+        "logs/benchmarking/diagnostics/rbf_normalization_generalization/"
+        "{atlas}_summary.tsv"
+    threads: 2
+    resources:
+        mem_mb=16000,
+        runtime=480,
+        slurm_account="cedar"
+    shell:
+        r"""
+        set +u
+        eval "$(conda shell.bash hook)"
+        conda activate scvi
+        set -u
+
+        export TMPDIR=${{TMPDIR:-/tmp}}
+        export MPLCONFIGDIR=${{MPLCONFIGDIR:-/tmp/mpl-$USER-$SLURM_JOB_ID}}
+        export OMP_NUM_THREADS={threads}
+        export MKL_NUM_THREADS={threads}
+        export OPENBLAS_NUM_THREADS={threads}
+
+        python {input.script:q} \
+            --atlas {wildcards.atlas:q} \
+            --cell_names {input.cell_names:q} \
+            --cell_metadata {input.cell_metadata:q} \
+            --umap_tsv {input.umap:q} \
+            --baseline_selected {input.baseline:q} \
+            --l1_selected {input.l1:q} \
+            --output_method_summary {output.methods:q} \
+            --output_cell_type_details {output.cell_types:q} \
+            --output_retention_changes {output.changes:q} \
+            --output_retention_png {output.retention:q} \
+            --output_composition_png {output.composition:q} \
+            --output_umap_coverage_png {output.coverage:q} \
+            --cell_type_column cell_type \
+            --rare_threshold 0.01 \
+            --chunk_size 50000 \
+            --dpi 320 \
+            > {log:q} 2>&1
+        """

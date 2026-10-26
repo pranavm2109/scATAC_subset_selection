@@ -1,0 +1,1 @@
+../check_NN_arrays.sbatch

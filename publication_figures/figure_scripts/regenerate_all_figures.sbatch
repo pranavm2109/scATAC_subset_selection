@@ -1,0 +1,1 @@
+../regenerate_all_figures.sbatch

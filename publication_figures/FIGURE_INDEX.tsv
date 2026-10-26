@@ -1,0 +1,12 @@
+original_label	suggested_sequential_label	basename	script	data	technical_caption
+S1	S1	S1_normalization	scripts/plot_existing_summaries.py:s1()	tables/S1_normalization_2pct.tsv; S1_normalization_budgets.tsv; S1_historical_subset_identity.tsv; S1_current_identity_check.tsv	supplementary_figures/S1_normalization.md
+S2	S2	S2_population_representation	scripts/plot_existing_summaries.py:s2()	tables/S2_composition.tsv; S2_all_population_metrics.tsv; S2_rare_examples.tsv; S2_DA_eligibility.tsv	supplementary_figures/S2_population_representation.md
+S3	S3	S3_DA_fidelity	scripts/plot_existing_summaries.py:s3()	tables/S3_pooled.tsv; S3_per_cell_type_direction.tsv; S3_fixed_eligibility.tsv; S3_common_eligible_types.tsv	supplementary_figures/S3_DA_fidelity.md
+S3b	S4	S3b_direction_specific_recovery	scripts/plot_existing_summaries.py:s3()	tables/S3b_direction_specific_recovery.tsv; S3_common_eligible_types.tsv	supplementary_figures/S3b_direction_specific_recovery.md
+S4	S5	S4_measured_60D_coverage	scripts/plot_random_benchmark_when_available.py:main()	tables/S4_S6_measured_benchmark_summary.tsv; ../benchmarks/full/*_metrics.tsv	supplementary_figures/MEASURED_BENCHMARK_TECHNICAL_CAPTIONS.md
+S5	S6	S5_computational_cost	scripts/plot_existing_summaries.py:s5()	tables/S5_selection.tsv; S5_stage_costs.tsv	supplementary_figures/S5_computational_cost.md
+S6	S7	S6_measured_random_comparison	scripts/plot_random_benchmark_when_available.py:main()	tables/S4_S6_measured_benchmark_summary.tsv; ../benchmarks/full/*_metrics.tsv	supplementary_figures/MEASURED_BENCHMARK_TECHNICAL_CAPTIONS.md
+S6b	S8	S6b_measured_rare_population_counts	scripts/plot_random_benchmark_when_available.py:main()	tables/S6b_measured_rare_population_counts.tsv; ../benchmarks/full/*_populations.tsv	supplementary_figures/MEASURED_BENCHMARK_TECHNICAL_CAPTIONS.md
+S7	S9	S7_descriptive_UMAP_grid	scripts/revised_grids.py:umap_grid()	tables/S7_descriptive_UMAP_grid.tsv; S7_display_counts.tsv; S7_S8_source_manifest.tsv	supplementary_figures/S7_descriptive_UMAP_grid.md
+S8	S10	S8_DA_effect_density_grid	scripts/revised_grids.py:da_grid()	tables/S8_density_bins.tsv; S8_panel_metrics.tsv; S7_S8_source_manifest.tsv	supplementary_figures/S8_DA_effect_density_grid.md
+S9	S11	S9_quantitative_selection_and_biological_fidelity_overview	figure_scripts/plot_s9_overview.py	figure_tables/S9_normalization.tsv; figure_tables/S9_composition.tsv; figure_tables/S9_DA.tsv	supplementary_figures/S9_quantitative_selection_and_biological_fidelity_overview.md
